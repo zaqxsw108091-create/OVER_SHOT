@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\" diff HEAD --stat)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(node --check \"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\\\\game.js\")",
+      "Bash(node -e \"require\\('canvas'\\)\")",
+      "Bash(node -e \"require\\('puppeteer'\\)\")",
+      "Bash(python -c \"from playwright.sync_api import sync_playwright; print\\('ok'\\)\")",
+      "Bash(python -c \"from selenium import webdriver; print\\('ok'\\)\")",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless --screenshot=\"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\\\\weapon_shot2.png\" --window-size=2100,480 \"file:///C:/Users/USER/projects/OVER_SHOT/weapon_test.html\")",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless --screenshot=\"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\\\\test2.png\" --window-size=2450,380 \"file:///C:/Users/USER/projects/OVER_SHOT/weapon_test2.html\")",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless --screenshot=\"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\\\\test2.png\" --window-size=2650,400 \"file:///C:/Users/USER/projects/OVER_SHOT/weapon_test2.html\")",
+      "Bash(ls \"C:\\\\Users\\\\USER\\\\projects\\\\OVER_SHOT\\\\\")"
+    ]
+  }
+}
