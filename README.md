@@ -77,7 +77,7 @@ No installation required.
 
 ```bash
 # Clone the repository
-git clone https://github.com/zaqxsw108091/OVER_SHOT.git
+git clone https://github.com/zaqxsw108091-create/OVER_SHOT.git
 
 # Open in your browser — that's it
 open index.html
