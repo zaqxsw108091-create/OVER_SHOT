@@ -673,9 +673,3 @@ function endGame() {
 - [ ] Wave/round system with score multiplier and boss
 - [ ] Additional heroes and ability variants
 - [ ] Mobile touch controls
-
----
-
-## License
-
-MIT
