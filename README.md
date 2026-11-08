@@ -2,8 +2,6 @@
 
 > A first-person shooter built entirely with vanilla JavaScript and HTML5 Canvas — no frameworks, no build tools, just open `index.html` and play.
 
-![Gameplay](screenshots/gameplay.png)
-
 ---
 
 ## Tech Stack
@@ -13,7 +11,7 @@
 | Language | Vanilla JavaScript (ES6+) |
 | Rendering | HTML5 Canvas 2D API |
 | Styling | Pure CSS3 |
-| Build Tools | **None** — single static file, zero dependencies |
+| Build Tools | **None** — no bundler, no framework, no npm packages (the only external request is the optional Google Fonts stylesheet in `styles.css`; the game still works without it) |
 | Storage | Browser `localStorage` (per-hero best records) |
 
 ---
@@ -21,7 +19,7 @@
 ## Core Implementation
 
 ### Raycasting Engine
-A classic DDA (Digital Differential Analyzer) raycasting renderer inspired by early 90s FPS games.
+A raycasting renderer inspired by early 90s FPS games. Each ray is marched forward in fixed 0.012-tile steps until it hits a wall tile (simple ray marching — not the DDA grid-traversal algorithm).
 - 16 × 16 tile map rendered in real-time at full viewport resolution
 - Per-column wall distance calculation with fisheye correction
 - Sky gradient / floor shading / distance-based wall brightness
@@ -62,11 +60,12 @@ Rendered with the Canvas `evenodd` fill rule — a full-screen rectangle with a 
 |---|---|
 | `W A S D` | Move |
 | Mouse move | Look (requires pointer lock) |
+| `← →` | Turn the camera (when the mouse can't be used) |
 | Left click | Attack / Fire |
 | Right click | ADS scope aim *(Medica only)* |
 | `R` | Reload |
 | `E` | Use ability |
-| `Q` | Quit to menu |
+| `Q` | Quit to menu (works only while paused; the top-right button does the same) |
 | `Esc` | Release mouse / Pause |
 
 ---
@@ -98,10 +97,8 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1 file)
-├── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
-└── screenshots/
-    └── gameplay.png
+├── game.js           # Complete game engine (~1,190 lines, single file)
+└── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 ### `game.js` at a glance
@@ -124,7 +121,7 @@ OVER_SHOT/
 
 ## Technical Deep Dive
 
-> Every feature below explains **what the code does**, **which lines implement it**, and **why that specific technique was chosen** over alternatives.
+> Every feature below explains **what the code does**, **where it lives**, and **why that specific technique was chosen** over alternatives. Code blocks are shortened excerpts of `game.js` (some lines trimmed or simplified), not verbatim copies.
 
 ---
 
@@ -208,6 +205,9 @@ function updatePlayer(dt) {
   if (keys['KeyA']) { mx += sa; my -= ca; }   // strafe: perpendicular
   if (keys['KeyD']) { mx -= sa; my += ca; }
 
+  const len = Math.hypot(mx, my) || 1;         // normalise so diagonals aren't faster
+  mx /= len; my /= len;
+
   const nx = player.x + mx * sp;
   const ny = player.y + my * sp;
   if (!isWall(nx, player.y)) player.x = nx;   // X axis only
@@ -218,7 +218,7 @@ function updatePlayer(dt) {
 **Why this approach:**
 - Testing X and Y independently means the player **slides** along a wall rather than stopping dead. If the full move is blocked in X but free in Y, the Y component still applies — this is the standard technique used in Wolfenstein 3-D.
 - `dt * 0.06` normalises movement to real time so the game speed is frame-rate-independent. A 30 fps machine and a 120 fps machine move at identical in-game speed.
-- Diagonal input is intentionally **not** normalised here (there is a `len = Math.hypot` normalise block), preventing the classic diagonal-speed exploit.
+- Diagonal input **is** normalised (`len = Math.hypot(mx, my)`), preventing the classic diagonal-speed exploit (moving diagonally would otherwise be ~41% faster).
 
 ---
 
@@ -625,7 +625,7 @@ function updateAbility(now) {
 
 **Why this approach:**
 - Three boolean states (`abilActive / abilReady / charging`) are collapsed into **one `pct` value** that drives the width of a CSS bar. This means the bar shows meaningful progress in all three states: draining during active use, filling during cooldown, full when ready.
-- The heal ability applies `+0.18 HP per frame` inside `updateAbility`, which is called every `requestAnimationFrame` tick. At 60 fps this is ~10.8 HP/s, giving a smooth animated heal rather than an instant jump.
+- The heal ability applies `+0.18 HP per frame` inside `updateAbility`, which is called every `requestAnimationFrame` tick. At 60 fps this is ~10.8 HP/s, giving a smooth animated heal rather than an instant jump. (Because it is per frame, not per second, the heal rate scales with the display's frame rate — a known simplification.)
 - `hero.abilDur` and `hero.abilCd` are per-hero values defined in the `HEROES` array, so changing cooldown timings requires editing only one place — no magic numbers scattered through the ability code.
 
 ---
@@ -645,15 +645,15 @@ function saveRecords(r) {
   try { localStorage.setItem(REC_KEY, JSON.stringify(r)); } catch(e) {}
 }
 
-// endGame — only update if this run beat the record
+// endGame — keep the best of each stat independently
 function endGame() {
-  const rec = getRecords();
-  const prev = rec[hero.id] || { kills: 0, time: 0 };
-  const newBest = kills > prev.kills || gameTime/1000 > prev.time;
-  if (kills > prev.kills) prev.kills = kills;
-  if (gameTime/1000 > prev.time) prev.time = gameTime/1000;
-  rec[hero.id] = prev;
-  saveRecords(rec);
+  const secs = gameTime / 1000;
+  const recs = getRecords();
+  const cur = recs[hero.id] || { kills: 0, time: 0 };
+  const newRecord = (kills > cur.kills) || (secs > cur.time);   // shows the "new record" badge
+  recs[hero.id] = { kills: Math.max(kills, cur.kills), time: Math.max(secs, cur.time) };
+  saveRecords(recs);
+  // … then fills the result screen and calls show('over')
 }
 ```
 
