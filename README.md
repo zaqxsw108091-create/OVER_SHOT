@@ -1,5 +1,7 @@
 # OVERSHOT
 
+**한국어:** [README.ko.md](README.ko.md)
+
 > A first-person shooter built entirely with vanilla JavaScript and HTML5 Canvas — no frameworks, no build tools, just open `index.html` and play.
 
 ---
@@ -348,7 +350,7 @@ const _lerp    = (a, b, u) => a + (b-a)*u;
 ```
 
 **Why this approach:**
-- Setting the Canvas origin to **bottom-centre of the screen** (`ctx.translate(W*0.5, H)`) means all weapon geometry is drawn in a local coordinate system where Y grows upward and X=0 is the screen centre. This keeps weapon coordinates intuitive and consistent across any viewport size.
+- Setting the Canvas origin to **bottom-centre of the screen** (`ctx.translate(W*0.5, H)`) means all weapon geometry is drawn in a local coordinate system where X=0 is the screen centre and upward is negative Y. This keeps weapon coordinates intuitive and consistent across any viewport size.
 - `Math.sin(now * freq)` oscillators give persistent, smooth sway without needing any state variables beyond `performance.now()`. Different frequencies for X/Y sway prevent the motion from looking mechanical.
 - The `amp` multiplier increases sway amplitude during movement, mimicking the bobbing of a carried weapon. At idle `amp = 0.4` gives a subtle breathing motion.
 - **`_easeIn`** (accelerating) is used for the **strike phase** of a swing — the weapon accelerates into the hit. **`_easeOut`** (decelerating) is used for **windup and recovery** — it snaps to the apex then gently returns. This asymmetry is the key to making melee feel weighty.
