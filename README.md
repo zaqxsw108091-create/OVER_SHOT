@@ -105,7 +105,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,890 lines, single file)
+├── game.js           # Complete game engine (~1,910 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
