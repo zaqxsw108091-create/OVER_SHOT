@@ -34,7 +34,7 @@ Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, an
 - **Assault Rifle "RAZOR-FX"** (Spark) — shown side-on with an under-barrel missile pod, holographic sight and orange glow lines. The magazine window shows remaining ammo, and the pod's three missiles slide out as the missile skill recharges (a "READY" hologram appears when it is ready). Recoil kick, muzzle flash.
 - **Sniper Rifle "LUX-VALOR"** (Medica) — white/blue body with a glass tube of swirling heal fluid and a gold muzzle with a glowing crystal. Bolt-action animation, ADS scope overlay (right-click).
 - **Hammer "SENTINEL MAUL"** (Titan) — spiked steel head with four glowing blue energy cells. Overhead vertical slam with motion-blur arc; the Barrier skill is drawn as a blue hexagon shield.
-- **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba, held across the screen. Three-phase samurai swing (guard pose → 上段 → 袈裟斬り) with a cyan slash trail.
+- **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba. Idle is a guard stance with the tip aimed at the screen centre (edge down). The swing moves the hands and the blade together (guard → 上段 → 袈裟斬り) so the edge leads the cut, with a cyan trail that follows the actual path of the tip.
 
 ### Firing Feedback
 - Gun stance: when not shooting, the rifle and sniper are held in the lower right of the screen with the muzzle angled toward the center, like a classic first-person view model (the left gloved hand supports the handguard from below; the barrel side is drawn slightly foreshortened for depth). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot (or when the right button is released) the gun returns to the held pose. Holding the right mouse button also brings up this centered sight view without firing. Sway is reduced while aiming.
@@ -105,7 +105,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,960 lines, single file)
+├── game.js           # Complete game engine (~1,980 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
@@ -407,14 +407,16 @@ if (t > 0.25 && t < 0.54) {
 **Where:** `drawKatana(now)` · `loop()` dynamic impact timing
 
 ```js
-// Three animation phases, same single-angle system as hammer
-let a = -1.45 + Math.sin(now * 0.0018) * 0.03;  // guard pose: blade held across the screen
+// Keyframes: [hand x, hand y, blade angle, visible blade length] — hands and blade move together
+const IDLE = [250, -160, -0.62, 0.86];  // chudan (中段): tip aimed at the screen centre, edge down, foreshortened
+const UP   = [300, -320,  0.55, 1.00];  // jodan (上段): hands raised to the right, blade over the shoulder
+const CUT  = [-60,   40, -2.25, 1.00];  // kesa-giri: hands travel down-left, edge leading
 
 if (swingT && now - swingT < KATANA_MS) {
   const t = (now - swingT) / KATANA_MS;
-  if      (t < 0.20) a = _lerp(-1.45,  0.50, _easeOut(t / 0.20));         // jodan (上段)
-  else if (t < 0.52) a = _lerp( 0.50, -2.30, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
-  else               a = _lerp(-2.30, -1.45, _easeOut((t-0.52) / 0.48));  // return to guard pose
+  if      (t < 0.20) K = mix(IDLE, UP,  _easeOut(t / 0.20));          // raise
+  else if (t < 0.52) K = mix(UP,   CUT, _easeIn((t-0.20) / 0.32));    // kesa-giri strike
+  else               K = mix(CUT,  IDLE, _smooth((t-0.52) / 0.48));   // back to guard
 }
 
 // Curved blade — 22 steps with sine offset for authentic katana curvature

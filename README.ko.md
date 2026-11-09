@@ -34,7 +34,7 @@
 - **돌격소총 "RAZOR-FX"** (Spark) — 옆모습이 보이게 들고 있으며, 총열 아래 미사일 포드, 홀로그램 조준경, 주황 발광 라인이 있습니다. 탄창 창에 남은 탄이 표시되고, 미사일 스킬이 충전될수록 포드의 미사일 3발이 밀려 나옵니다(준비되면 "READY" 홀로그램 표시). 반동, 총구 화염.
 - **저격소총 "LUX-VALOR"** (Medica) — 흰·파랑 몸체에 회복약이 소용돌이치는 유리관, 빛나는 결정이 달린 금장 총구. 볼트액션 애니메이션, 조준(ADS) 스코프 화면 (우클릭).
 - **해머 "SENTINEL MAUL"** (Titan) — 가시 달린 강철 머리에 파랗게 빛나는 에너지 셀 4개. 머리 위에서 수직으로 내리치기 + 모션 블러 호. 방벽 스킬은 파란 육각형 보호막으로 표시됩니다.
-- **카타나 "RISING DRAGON"** (Kage) — 하늘색 발광선이 있는 칼날과 검정·금색 쓰바, 화면을 가로질러 겨눈 자세. 3단계 사무라이 베기 (겨눔 자세 → 上段 → 袈裟斬り) + 하늘색 베기 궤적.
+- **카타나 "RISING DRAGON"** (Kage) — 하늘색 발광선이 있는 칼날과 검정·금색 쓰바. 평소엔 칼끝이 화면 가운데를 향한 겨눔 자세(날은 아래). 휘두를 때는 손과 칼이 함께 움직여(겨눔 → 上段 → 袈裟斬り) 칼날이 앞장서서 베고, 칼끝이 실제로 지나간 자리를 따라 하늘색 궤적이 남음.
 
 ### 사격 연출
 - 총 자세: 쏘지 않을 때 소총·저격총은 화면 오른쪽 아래에서 총구가 가운데 쪽을 비스듬히 향하는 1인칭 자세로 보입니다(장갑 낀 왼손이 핸드가드를 아래에서 받침, 총열 쪽은 원근감 있게 조금 짧게 그림). 쏘면 총이 **화면 가운데로 와서 뒤에서 조준경을 들여다보는 자세**(조준 사격)가 됩니다. 소총의 홀로그램 조준경 창과 저격총의 스코프 접안부가 정확히 조준점에 오고, 적을 겨누면 조준점이 빨갛게 바뀌며, 화면의 + 조준선은 숨겨집니다. 옆모습은 가운데로 들어오며 사라지고 가운데 조준 화면은 아래에서 올라옵니다(약 0.15초, smoothstep). 마지막 발사 후 약 0.65초가 지나면(또는 오른쪽 버튼을 떼면) 다시 들고 있는 자세로 돌아오며, 겨누는 동안은 흔들림이 줄어듭니다. 오른쪽 버튼을 누르고 있으면 쏘지 않아도 이 가운데 조준 화면이 됩니다.
@@ -107,13 +107,13 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,960 lines, single file)
+├── game.js           # Complete game engine (~1,980 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
-- `game.js` — 게임 엔진 전체 (약 1,960줄, 파일 하나)
+- `game.js` — 게임 엔진 전체 (약 1,980줄, 파일 하나)
 - `GAME_GUIDE.md` — 전체 기능과 플레이 설명서 (한국어)
 
 ### `game.js` 한눈에 보기
@@ -416,14 +416,16 @@ if (t > 0.25 && t < 0.54) {
 **위치:** `drawKatana(now)` · `loop()`의 동적 타격 시점
 
 ```js
-// Three animation phases, same single-angle system as hammer
-let a = -1.45 + Math.sin(now * 0.0018) * 0.03;  // guard pose: blade held across the screen
+// Keyframes: [hand x, hand y, blade angle, visible blade length] — hands and blade move together
+const IDLE = [250, -160, -0.62, 0.86];  // chudan (中段): tip aimed at the screen centre, edge down, foreshortened
+const UP   = [300, -320,  0.55, 1.00];  // jodan (上段): hands raised to the right, blade over the shoulder
+const CUT  = [-60,   40, -2.25, 1.00];  // kesa-giri: hands travel down-left, edge leading
 
 if (swingT && now - swingT < KATANA_MS) {
   const t = (now - swingT) / KATANA_MS;
-  if      (t < 0.20) a = _lerp(-1.45,  0.50, _easeOut(t / 0.20));         // jodan (上段)
-  else if (t < 0.52) a = _lerp( 0.50, -2.30, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
-  else               a = _lerp(-2.30, -1.45, _easeOut((t-0.52) / 0.48));  // return to guard pose
+  if      (t < 0.20) K = mix(IDLE, UP,  _easeOut(t / 0.20));          // raise
+  else if (t < 0.52) K = mix(UP,   CUT, _easeIn((t-0.20) / 0.32));    // kesa-giri strike
+  else               K = mix(CUT,  IDLE, _smooth((t-0.52) / 0.48));   // back to guard
 }
 
 // Curved blade — 22 steps with sine offset for authentic katana curvature

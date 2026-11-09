@@ -1501,23 +1501,30 @@ function iaiSlash(){
 // ── 일본도 RISING DRAGON (카게) ─────────────────────────────
 // 중단 자세 대기, 袈裟斬り(케사기리) 사선 베기 모션
 // 디자인: 은빛 날 + 하늘색 발광선, 금 테두리의 검은 쓰바(용 문양), 금색 마름모 자루 감기
+let kTrail=[];   // 베는 동안 칼끝이 지나간 자리 (궤적 그리기용)
 function drawKatana(now){
   const KATANA_MS=500;
-  const px=150, py=-120;          // 손 피벗 (화면 오른쪽 아래)
-  const handleL=100, bladeL=430;  // 자루·날 길이
+  const handleL=100, BLADE=430;   // 자루·실제 날 길이
   const sc=weaponScale(); ctx.save(); ctx.scale(sc,sc);
   const CY='#3fe0ff', GOLD='#c9a24a';
 
-  // a: 0=날 수직위, +오른쪽, -왼쪽
-  // 대기(칼을 화면 가로로 겨눔) → 조단(오른쪽 위로 들기) → 케사기리(오른쪽 위→왼쪽 아래 사선 베기)
-  let a=-1.45+Math.sin(now*0.0018)*0.03;
+  // 자세 키프레임: [손 x, 손 y, 칼 각도 a(0=위, -=왼쪽), 보이는 날 길이 비율]
+  //  겨눔(中段): 오른쪽 아래에서 칼끝이 화면 가운데(적)를 향함. 날은 아래쪽, 칼이 화면 안쪽으로 뻗어 짧아 보임
+  //  들기(上段): 손을 오른쪽 위로 올려 칼을 어깨 위로 세움
+  //  베기(袈裟斬り): 손이 왼쪽 아래로 내려가며 칼날이 앞장서서 사선으로 벰 (손과 칼이 함께 움직임)
+  const IDLE=[250,-160,-0.62,0.86], UP=[300,-320,0.55,1.0], CUT=[-60,40,-2.25,1.0];
+  const mix=(A,B,u)=>A.map((v,i)=>_lerp(v,B[i],u));
+  const breath=Math.sin(now*0.0018);
+  let K=[IDLE[0], IDLE[1]+breath*4, IDLE[2]+breath*0.02, IDLE[3]];
   let t=-1;
   if(swingT && now-swingT<KATANA_MS){
     t=(now-swingT)/KATANA_MS;
-    if(t<0.20){      a=_lerp(-1.45, 0.50,_easeOut(t/0.20)); }          // 조단으로 들어올리기
-    else if(t<0.52){ a=_lerp( 0.50,-2.30,_easeIn((t-0.20)/0.32)); }    // 오른쪽 위→왼쪽 아래 사선 강타
-    else {           a=_lerp(-2.30,-1.45,_easeOut((t-0.52)/0.48)); }   // 겨눔 자세로 복원
+    if(t<0.20)      K=mix(IDLE,UP,_easeOut(t/0.20));            // 들어올리기
+    else if(t<0.52) K=mix(UP,CUT,_easeIn((t-0.20)/0.32));       // 사선 베기 (점점 빨라짐)
+    else            K=mix(CUT,IDLE,_smooth((t-0.52)/0.48));     // 겨눔 자세로 돌아옴
   }
+  const px=K[0], py=K[1], bladeL=BLADE*K[3];
+  let a=K[2];
 
   const dx=Math.sin(a), dy=-Math.cos(a);
   const pommX=px-dx*handleL, pommY=py-dy*handleL;  // 자루 끝(봉미)
@@ -1529,7 +1536,7 @@ function drawKatana(now){
 
   // 팔 (양손 잡기 — 사무라이 특유 두 손 자세)
   // 오른팔: 파란 장갑 + 금색 손목 링 / 왼팔: 검은 소매
-  const LAX=40, LAY=320, RAX=360, RAY=280;           // 팔이 시작되는 화면 아래 지점
+  const LAX=150, LAY=380, RAX=440, RAY=340;          // 팔이 시작되는 화면 아래 지점
   ctx.lineCap='round';
   ctx.strokeStyle='#15171c'; ctx.lineWidth=44;
   ctx.beginPath(); ctx.moveTo(LAX,LAY); ctx.lineTo(lhx,lhy); ctx.stroke();
@@ -1624,32 +1631,26 @@ function drawKatana(now){
   ctx.restore();
 
   // 두 손 — 오른손 파란 장갑(금 테두리), 왼손 검은 반장갑(손가락 끝이 보임)
-  drawHand(rhx,rhy,26,'#1d3c6e','#2f63b0',GOLD);
-  drawHand(lhx,lhy,24,'#0f1013','#23262d');
-  ctx.fillStyle='#c99a7a';
-  for(let j=-1;j<=1;j++){ ctx.beginPath(); ctx.arc(lhx+perpX*j*8+dx*10,lhy+perpY*j*8+dy*10,3.8,0,7); ctx.fill(); }
+  drawGlove(lhx,lhy,28,Math.atan2(LAY-lhy,LAX-lhx),'#15171c','#23262d','#3a8be0','#101114');
+  drawGlove(rhx,rhy,30,Math.atan2(RAY-rhy,RAX-rhx),'#1d3c6e','#2f63b0',GOLD,'#173156');
 
-  // ── 베기 이펙트: 하늘색 초승달 궤적 ──
-  if(t>=0){
-    if(t>0.20 && t<0.64){
-      const f=Math.min(1,(t-0.20)/0.44), fade=1-f;
-      const aNow=Math.max(-2.30,Math.min(0.50, t<0.52?a:-2.30));
-      const th0=0.50-Math.PI/2, th1=aNow-Math.PI/2;
-      if(th0-th1>0.01){
-        ctx.save(); ctx.lineCap='round';
-        ctx.globalAlpha=0.22*fade; ctx.strokeStyle=CY; ctx.lineWidth=70;
-        ctx.beginPath(); ctx.arc(px,py,bladeL*0.78,th0,th1,true); ctx.stroke();
-        ctx.globalAlpha=0.55*fade; ctx.lineWidth=14;
-        ctx.beginPath(); ctx.arc(px,py,bladeL*0.95,th0,th1,true); ctx.stroke();
-        ctx.globalAlpha=0.9*fade; ctx.strokeStyle='#eaffff'; ctx.lineWidth=3;
-        ctx.beginPath(); ctx.arc(px,py,bladeL,th0,th1,true); ctx.stroke();
-        ctx.restore();
-        for(let i=0;i<5;i++){ // 불꽃 조각
-          const th=th1+(th0-th1)*Math.random(), rr=bladeL*(0.8+Math.random()*0.25);
-          glowDot(px+Math.cos(th)*rr,py+Math.sin(th)*rr,1.4,CY,fade);
-        }
-      }
+  // ── 베기 이펙트: 칼날이 실제로 지나간 자리를 따라가는 하늘색 궤적 ──
+  if(t>0.18 && t<0.56){
+    kTrail.push({ tx:tipX, ty:tipY, mx:px+dx*bladeL*0.6, my:py+dy*bladeL*0.6, t:now });
+  } else if(t<0) kTrail=[];
+  kTrail=kTrail.filter(p=>now-p.t<140);
+  if(kTrail.length>1){
+    ctx.save();
+    for(let i=1;i<kTrail.length;i++){
+      const p0=kTrail[i-1], p1=kTrail[i], f=1-(now-p1.t)/140;
+      ctx.globalAlpha=0.22*f; ctx.fillStyle=CY;
+      ctx.beginPath(); ctx.moveTo(p0.mx,p0.my); ctx.lineTo(p0.tx,p0.ty); ctx.lineTo(p1.tx,p1.ty); ctx.lineTo(p1.mx,p1.my); ctx.closePath(); ctx.fill();
     }
+    ctx.globalAlpha=1;
+    glowPath(CY,3,()=>{ ctx.moveTo(kTrail[0].tx,kTrail[0].ty); for(const p of kTrail) ctx.lineTo(p.tx,p.ty); });
+    ctx.restore();
+  }
+  if(t>=0){
     if(t>0.38 && t<0.60){
       // 임팩트 빛 (칼끝)
       const f=(t-0.38)/0.22;
