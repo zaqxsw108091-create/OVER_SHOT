@@ -1,3 +1,5 @@
+▶ **Play now:** https://zaqxsw108091-create.github.io/OVER_SHOT/
+
 # OVERSHOT
 
 **한국어:** [README.ko.md](README.ko.md)

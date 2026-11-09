@@ -1,3 +1,5 @@
+▶ **지금 플레이:** https://zaqxsw108091-create.github.io/OVER_SHOT/
+
 # OVERSHOT
 
 **English:** [README.md](README.md)
