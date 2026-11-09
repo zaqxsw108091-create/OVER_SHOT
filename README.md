@@ -37,7 +37,7 @@ Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, an
 - **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba, held across the screen. Three-phase samurai swing (guard pose → 上段 → 袈裟斬り) with a cyan slash trail.
 
 ### Firing Feedback
-- Gun stance: when not shooting, the rifle and sniper are held level with both gloved hands across the lower part of the screen, shown side-on (left hand under the missile pod / handguard, right hand on the grip). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot (or when the right button is released) the gun returns to the held pose. Holding the right mouse button also brings up this centered sight view without firing. Sway is reduced while aiming.
+- Gun stance: when not shooting, the rifle and sniper are held in the lower right of the screen with the muzzle angled toward the center, like a classic first-person view model (the left gloved hand supports the handguard from below; the barrel side is drawn slightly foreshortened for depth). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot (or when the right button is released) the gun returns to the held pose. Holding the right mouse button also brings up this centered sight view without firing. Sway is reduced while aiming.
 - Every shot: recoil kick with a little sideways jitter, the bolt cycles in the ejection port, a shell casing flies out, muzzle smoke, a brief bullet tracer to the crosshair, sparks or dust where it lands, and the hit enemy flashes white and is pushed back a little. Killed enemies tip over and fade out.
 - Reload: the gun tilts, the empty magazine drops, a new one goes in, then the charging handle is pulled. The sniper's right hand works the bolt after every shot.
 - Missile skill: the pod kicks back and flashes, and the floating hologram switches READY → LAUNCH → charge %.
@@ -67,7 +67,7 @@ Rendered with the Canvas `evenodd` fill rule — a full-screen rectangle with a 
 | Input | Action |
 |---|---|
 | `W A S D` | Move |
-| Mouse move | Look. Clicking the game locks the mouse to the screen; if the browser cannot lock it (some built-in or embedded browsers), the game switches to cursor mode — move the cursor to look (the arrow keys also turn) |
+| Mouse move | Look. Clicking the game locks the mouse to the screen; if the browser cannot lock it (some built-in or embedded browsers), the game switches to cursor mode — move the cursor to look; mouse movement is applied smoothly over a few frames (the arrow keys also turn) |
 | `← →` | Turn the camera (when the mouse can't be used) |
 | Left click | Attack / Fire |
 | Right click (hold) | Aim through the sight without firing — Spark: holographic sight, Medica: scope overlay |
@@ -105,7 +105,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,920 lines, single file)
+├── game.js           # Complete game engine (~1,930 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 

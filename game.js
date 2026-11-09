@@ -169,7 +169,7 @@ document.addEventListener('keyup',e=>{ keys[e.code]=false; });
 let lockless=false;
 function setPaused(p){
   paused=p;
-  if(p){ firing=false; adsActive=false; }
+  if(p){ firing=false; adsActive=false; turnBuf=0; }
   el('lockmsg').classList.toggle('hide', !p);
   el('quitBtn').classList.toggle('hide', !p || !running);
 }
@@ -190,11 +190,12 @@ document.addEventListener('pointerlockchange',()=>{
   if(locked){ lockless=false; setPaused(false); }
   else if(!lockless) setPaused(true);
 });
+let turnBuf=0;   // 커서 모드: 마우스 움직임을 모아 두었다가 몇 프레임에 나눠 돌림 (뚝뚝 끊기지 않게)
 document.addEventListener('mousemove',e=>{
   if(!controlling()) return;
-  // 커서 모드에서는 커서가 창 밖에서 다시 들어올 때 움직임 값이 크게 튀므로 한 번에 도는 양을 제한
-  const lim = lockless ? 40 : 250;
-  player.ang += Math.max(-lim, Math.min(lim, e.movementX))*0.0024;
+  const mx=e.movementX||0;
+  if(Math.abs(mx)>300) return;               // 커서가 창 밖에서 들어올 때 생기는 비정상적인 큰 값만 무시
+  if(lockless) turnBuf += mx*0.0024; else player.ang += mx*0.0024;
 });
 // 창이 포커스를 잃으면(다른 창 클릭 등) 눌린 키가 떼어진 것으로 처리 — 키가 눌린 채로 남아 계속 움직이던 문제 방지
 function releaseAllInput(){ for(const k in keys) keys[k]=false; firing=false; adsActive=false; }
@@ -541,6 +542,8 @@ function updatePlayer(dt){
   // 키보드 회전 (마우스 못쓸 때)
   if(keys['ArrowLeft']) player.ang-=0.045*dt*0.06;
   if(keys['ArrowRight']) player.ang+=0.045*dt*0.06;
+  // 커서 모드: 모아 둔 마우스 회전을 약 35ms에 걸쳐 부드럽게 적용
+  if(turnBuf){ const d=turnBuf*Math.min(1,dt/35); player.ang+=d; turnBuf-=d; if(Math.abs(turnBuf)<1e-5) turnBuf=0; }
 
 }
 
@@ -878,21 +881,31 @@ function drawRifleSide(now){
   const charge=abilCharge(now);
   const mt=now-muzzle, lt=now-missileFireT;
   const R=reloadAnim(now);
-  // 평소 자세: 두 손으로 총을 수평으로 들어 화면 아래쪽을 가로지름 (쏘면 가운데 조준으로 넘어감)
-  const P=gunPose([40,-H*0.30/s,0.02],[30,-H*0.36/s,0.0]);
+  // 평소 자세: 오른쪽 아래에서 총구가 화면 가운데 쪽을 비스듬히 향하는 1인칭 자세 (총열 쪽은 원근감으로 짧게)
+  // 쏘거나 우클릭하면 가운데 조준 화면으로 넘어감
+  const A_=_smooth(Math.max(0,Math.min(1,aimBlend))), mid_=Math.sin(A_*Math.PI);
+  const Kx=1.05*s, Ky=1.42*s;
+  const th=_lerp(0.50,0.30,A_)+mid_*0.05;
+  const mzx=_lerp(W*0.50,W*0.48,A_), mzy=_lerp(H*0.62,H*0.56,A_)-mid_*12*s;   // 총구가 오는 화면 위치
   ctx.save();
-  ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
-  ctx.rotate(P.r + k*0.10 + recoilJit*k - R.tilt*0.20);
-  ctx.scale(s*1.6,s*1.6);
+  ctx.translate(mzx-W/2+358*Kx*Math.cos(th), mzy-H+358*Kx*Math.sin(th) + R.tilt*40*s);
+  ctx.rotate(th + k*0.10 + recoilJit*k - R.tilt*0.20);
+  ctx.scale(Kx,Ky);
   ctx.translate(k*34, k*5);
   // 화면 좌표 기록 (탄피·연기·총알 궤적이 여기서 나감)
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
   gunFx.muzzle=tp(-358,0); gunFx.eject=tp(96,-18); gunFx.pod=tp(-190,48);
   // 왼손: 평소엔 핸드가드 뒤쪽 아래, 재장전 중엔 탄창으로
-  const LHX=_lerp(-96,70,R.hand), LHY=_lerp(84,150+Math.min(R.magDy,90),R.hand);   // 왼손: 미사일 포드를 아래에서 쥠
+  const LHX=_lerp(-118,70,R.hand), LHY=_lerp(70,150+Math.min(R.magDy,90),R.hand);  // 왼손: 핸드가드·포드를 아래에서 받침
   // 팔 (총 뒤쪽)
-  drawArm(-190,400,LHX+10,LHY+18,64,'#23262c','#3a8be0');   // 왼팔 (아래 왼쪽에서)
-  drawArm(340,400,166,100,68,'#23262c','#3a8be0');           // 오른팔 → 손잡이
+  {                                   // 팔 (화면 좌표로 그려 비율이 찌그러지지 않게)
+    const TM=ctx.getTransform(), S_=(x,y)=>TM.transformPoint(new DOMPoint(x,y));
+    const hL=S_(LHX,LHY), hR=S_(156,86), aL=S_(LHX-80,LHY+260), aR=S_(330,330);
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    drawArm(aL.x,aL.y,hL.x,hL.y,62*s,'#23262c','#3a8be0');
+    drawArm(aR.x,aR.y,hR.x,hR.y,68*s,'#23262c','#3a8be0');
+    ctx.restore();
+  }
 
   // 개머리판 (조절식) + 버퍼 튜브
   ctx.fillStyle='#24272d'; roundRect(136,-14,60,24,6); ctx.fill();
@@ -1013,8 +1026,14 @@ function drawRifleSide(now){
   ctx.lineTo(146,126); ctx.closePath(); ctx.fill();
   ctx.fillStyle='#0c0d10'; for(let i=0;i<7;i++) ctx.fillRect(140+i*2.6,52+i*10,22,2);
   // 손
-  drawGlove(LHX,LHY,34,2.0);     // 왼손 장갑 (포드를 감쌈, 재장전 중엔 탄창을 잡음)
-  drawGlove(156,86,36,0.85);     // 오른손 장갑 (손잡이를 감쌈)
+  {                                   // 장갑 낀 두 손 (화면 좌표로 그려 비율 유지, 소매가 팔 쪽을 향하게)
+    const TM=ctx.getTransform(), S_=(x,y)=>TM.transformPoint(new DOMPoint(x,y));
+    const hL=S_(LHX,LHY), hR=S_(156,86), aL=S_(LHX-80,LHY+260), aR=S_(330,330);
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    drawGlove(hL.x,hL.y,34*s,Math.atan2(aL.y-hL.y,aL.x-hL.x));
+    drawGlove(hR.x,hR.y,38*s,Math.atan2(aR.y-hR.y,aR.x-hR.x));
+    ctx.restore();
+  }
   // 머즐 플래시 — 앞으로 길게 뻗는 불꽃 + 주변을 밝히는 빛
   if(mt<70){
     const f=1-mt/70, v=Math.floor(muzzle)%3;
@@ -1059,20 +1078,30 @@ function drawSniperSide(now){
   const RHX=_lerp(144,bx+4,handB), RHY=_lerp(66,by+2,handB);
   const LHX=_lerp(-120,52,R.hand), LHY=_lerp(22,120+Math.min(R.magDy,90),R.hand);
 
-  // 평소 자세: 두 손으로 총을 수평으로 들어 화면 아래쪽을 가로지름 (쏘면 가운데 조준으로 넘어감)
-  const P=gunPose([80,-H*0.30/s,0.02],[60,-H*0.36/s,0.0]);
+  // 평소 자세: 오른쪽 아래에서 총구가 화면 가운데 쪽을 비스듬히 향하는 1인칭 자세 (총열 쪽은 원근감으로 짧게)
+  // 쏘거나 우클릭하면 가운데 조준 화면으로 넘어감
+  const A_=_smooth(Math.max(0,Math.min(1,aimBlend))), mid_=Math.sin(A_*Math.PI);
+  const Kx=0.95*s, Ky=1.32*s;
+  const th=_lerp(0.50,0.30,A_)+mid_*0.05;
+  const mzx=_lerp(W*0.50,W*0.48,A_), mzy=_lerp(H*0.62,H*0.56,A_)-mid_*12*s;   // 총구가 오는 화면 위치
   ctx.save();
-  ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
-  ctx.rotate(P.r + k*0.08 + recoilJit*k - R.tilt*0.20);
-  ctx.scale(s*1.45,s*1.45);
+  ctx.translate(mzx-W/2+414*Kx*Math.cos(th), mzy-H+414*Kx*Math.sin(th) + R.tilt*40*s);
+  ctx.rotate(th + k*0.08 + recoilJit*k - R.tilt*0.20);
+  ctx.scale(Kx,Ky);
   ctx.translate(k*30, k*6);
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
   gunFx.muzzle=tp(-414,0); gunFx.eject=tp(112,-20); gunFx.pod=null;
   // 흰 장갑 팔 + 하늘색 발광선
-  drawArm(-200,400,LHX+10,LHY+18,60,'#d9e1ec',BL);
-  drawArm(340,400,RHX+10,RHY+18,64,'#d9e1ec',BL);
-  glowPath(CY,1.5,()=>{ ctx.moveTo(-190,350); ctx.lineTo(_lerp(-200,LHX,0.65),_lerp(380,LHY,0.65)); });
-  glowPath(CY,1.5,()=>{ ctx.moveTo(316,352); ctx.lineTo(_lerp(330,RHX,0.62),_lerp(380,RHY,0.62)); });
+  {                                   // 팔 (화면 좌표로 그려 비율이 찌그러지지 않게)
+    const TM=ctx.getTransform(), S_=(x,y)=>TM.transformPoint(new DOMPoint(x,y));
+    const hL=S_(LHX,LHY), hR=S_(RHX,RHY), aL=S_(LHX-80,LHY+260), aR=S_(330,330);
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    drawArm(aL.x,aL.y,hL.x,hL.y,62*s,'#d9e1ec','#2f6fd6');
+    drawArm(aR.x,aR.y,hR.x,hR.y,68*s,'#d9e1ec','#2f6fd6');
+    glowPath(CY,1.5*s,()=>{ ctx.moveTo(_lerp(aL.x,hL.x,0.15),_lerp(aL.y,hL.y,0.15)); ctx.lineTo(_lerp(aL.x,hL.x,0.65),_lerp(aL.y,hL.y,0.65)); });
+    glowPath(CY,1.5*s,()=>{ ctx.moveTo(_lerp(aR.x,hR.x,0.15),_lerp(aR.y,hR.y,0.15)); ctx.lineTo(_lerp(aR.x,hR.x,0.62),_lerp(aR.y,hR.y,0.62)); });
+    ctx.restore();
+  }
 
   // 개머리판 (흰 쉘) + 하늘색 회복약 캡슐
   ctx.fillStyle=wgrad(-34,70); ctx.beginPath();
@@ -1174,8 +1203,14 @@ function drawSniperSide(now){
   ctx.lineTo(138,118); ctx.closePath(); ctx.fill();
   ctx.fillStyle=BL; ctx.beginPath(); ctx.moveTo(118,24); ctx.lineTo(128,24); ctx.lineTo(146,118); ctx.lineTo(138,118); ctx.closePath(); ctx.fill();
   // 흰 장갑 손 (금색 테두리)
-  drawGlove(LHX,LHY,32,2.0,'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
-  drawGlove(RHX,RHY,34,0.85,'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
+  {                                   // 장갑 낀 두 손 (화면 좌표로 그려 비율 유지, 소매가 팔 쪽을 향하게)
+    const TM=ctx.getTransform(), S_=(x,y)=>TM.transformPoint(new DOMPoint(x,y));
+    const hL=S_(LHX,LHY), hR=S_(RHX,RHY), aL=S_(LHX-80,LHY+260), aR=S_(330,330);
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    drawGlove(hL.x,hL.y,34*s,Math.atan2(aL.y-hL.y,aL.x-hL.x),'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
+    drawGlove(hR.x,hR.y,38*s,Math.atan2(aR.y-hR.y,aR.x-hR.x),'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
+    ctx.restore();
+  }
   // 머즐 플래시 (하늘색 회복탄) + 빛 번짐
   if(mt<160){
     const f=1-mt/160,r=18+Math.random()*10;
