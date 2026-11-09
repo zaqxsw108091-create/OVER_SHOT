@@ -1502,9 +1502,32 @@ function iaiSlash(){
 // 중단 자세 대기, 袈裟斬り(케사기리) 사선 베기 모션
 // 디자인: 은빛 날 + 하늘색 발광선, 금 테두리의 검은 쓰바(용 문양), 금색 마름모 자루 감기
 let kTrail=[];   // 베는 동안 칼끝이 지나간 자리 (궤적 그리기용)
+// 칼자루를 감싸 쥔 손 — 손가락 4개가 자루를 가로질러 반대편으로 감싸고, 손등·너클은 팔 쪽에 보임
+// (hx,hy) 손 중심(자루 위), (ux,uy) 칼끝 쪽 자루 방향(단위벡터), (ax,ay) 팔이 오는 점
+function drawGripHand(hx,hy,ux,uy,ax,ay,r,base,finger,accent){
+  const side = ((ax-hx)*(-uy) + (ay-hy)*ux) >= 0 ? 1 : -1;   // 팔이 자루의 어느 편에 있는지
+  const Y=(v)=>side*v;                                          // 팔 쪽이 +가 되도록 뒤집기
+  ctx.save(); ctx.translate(hx,hy); ctx.rotate(Math.atan2(uy,ux));
+  // 손등 (팔 쪽)
+  ctx.fillStyle=base; roundRect(-r*0.62, Math.min(Y(r*0.02),Y(r*0.98)), r*1.24, r*0.96, r*0.35); ctx.fill();
+  // 손가락: 자루를 가로질러 반대편으로 감쌈
+  for(let i=0;i<4;i++){
+    const x=-r*0.48+i*r*0.32;
+    ctx.fillStyle=finger; roundRect(x-r*0.14, Math.min(Y(-r*0.64),Y(r*0.12)), r*0.28, r*0.76, r*0.13); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.fillRect(x-r*0.06, Math.min(Y(-r*0.56),Y(-r*0.42)), r*0.12, r*0.14);   // 손톱 쪽 끝
+  }
+  // 너클 줄 (자루 바로 옆)
+  ctx.fillStyle='rgba(255,255,255,0.12)'; roundRect(-r*0.58, Math.min(Y(r*0.04),Y(r*0.24)), r*1.16, r*0.2, r*0.1); ctx.fill();
+  // 엄지: 칼끝 쪽에서 자루 위를 비스듬히 덮음
+  ctx.save(); ctx.translate(r*0.58, Y(r*0.18)); ctx.rotate(-side*0.55);
+  ctx.fillStyle=base; roundRect(-r*0.14,-r*0.4,r*0.3,r*0.62,r*0.15); ctx.fill(); ctx.restore();
+  // 손목 띠
+  ctx.fillStyle=accent; roundRect(-r*0.55, Math.min(Y(r*0.86),Y(r*1.0)), r*1.1, r*0.14, r*0.06); ctx.fill();
+  ctx.restore();
+}
 function drawKatana(now){
   const KATANA_MS=500;
-  const handleL=100, BLADE=430;   // 자루·실제 날 길이
+  const handleL=124, BLADE=430;   // 자루·실제 날 길이
   const sc=weaponScale(); ctx.save(); ctx.scale(sc,sc);
   const CY='#3fe0ff', GOLD='#c9a24a';
 
@@ -1531,23 +1554,19 @@ function drawKatana(now){
   const tsubX=px+dx*8,       tsubY=py+dy*8;         // 쓰바(가드)
   const tipX =px+dx*bladeL,  tipY =py+dy*bladeL;    // 칼끝(키사키)
   const perpX=dy, perpY=-dx;                         // 날에 수직 방향
-  const rhx=px+dx*(-8), rhy=py+dy*(-8);              // 오른손 (가드 근처)
-  const lhx=px-dx*60,   lhy=py-dy*60;                // 왼손 (봉미 근처)
+  const rhx=px-dx*24, rhy=py-dy*24;                  // 오른손 (쓰바 바로 아래)
+  const lhx=px-dx*96, lhy=py-dy*96;                  // 왼손 (자루 끝, 사이에 자루가 한 뼘 보임)
 
   // 팔 (양손 잡기 — 사무라이 특유 두 손 자세)
   // 오른팔: 파란 장갑 + 금색 손목 링 / 왼팔: 검은 소매
-  const LAX=150, LAY=380, RAX=440, RAY=340;          // 팔이 시작되는 화면 아래 지점
-  ctx.lineCap='round';
-  ctx.strokeStyle='#15171c'; ctx.lineWidth=44;
-  ctx.beginPath(); ctx.moveTo(LAX,LAY); ctx.lineTo(lhx,lhy); ctx.stroke();
-  ctx.strokeStyle='#262a33'; ctx.lineWidth=9;
-  ctx.beginPath(); ctx.moveTo(LAX,LAY); ctx.lineTo(_lerp(LAX,lhx,0.7),_lerp(LAY,lhy,0.7)); ctx.stroke();
-  ctx.strokeStyle='#1d3c6e'; ctx.lineWidth=50;
-  ctx.beginPath(); ctx.moveTo(RAX,RAY); ctx.lineTo(rhx,rhy); ctx.stroke();
-  ctx.strokeStyle='#2f63b0'; ctx.lineWidth=14;
-  ctx.beginPath(); ctx.moveTo(RAX,RAY); ctx.lineTo(_lerp(RAX,rhx,0.7),_lerp(RAY,rhy,0.7)); ctx.stroke();
-  ctx.strokeStyle=GOLD; ctx.lineWidth=52; ctx.lineCap='butt';
-  ctx.beginPath(); ctx.moveTo(_lerp(RAX,rhx,0.80),_lerp(RAY,rhy,0.80)); ctx.lineTo(_lerp(RAX,rhx,0.85),_lerp(RAY,rhy,0.85)); ctx.stroke();
+  const LAX=500, LAY=470, RAX=330, RAY=470;          // 팔이 시작되는 화면 아래 지점 — 두 팔뚝이 자루를 가리지 않게 자루 양옆으로 내려감
+  const armTo=(sx,sy,hx,hy,w,c0,c1)=>{                // 팔뚝: 소매 + 위쪽 줄무늬, 손목에서 끝남
+    ctx.lineCap='round';
+    ctx.strokeStyle=c0; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.strokeStyle=c1; ctx.lineWidth=w*0.22; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(_lerp(sx,hx,0.82),_lerp(sy,hy,0.82)); ctx.stroke();
+  };
+  armTo(LAX,LAY,lhx,lhy,50,'#15171c','#2a2e36');     // 왼팔 (검은 소매)
+  armTo(RAX,RAY,rhx,rhy,54,'#1d3c6e','#2f63b0');     // 오른팔 (파란 갑옷 소매)
 
   // 쓰카(자루) 본체 — 검은 감기
   ctx.strokeStyle='#0b0c0f'; ctx.lineWidth=29; ctx.lineCap='round';
@@ -1631,8 +1650,8 @@ function drawKatana(now){
   ctx.restore();
 
   // 두 손 — 오른손 파란 장갑(금 테두리), 왼손 검은 반장갑(손가락 끝이 보임)
-  drawGlove(lhx,lhy,28,Math.atan2(LAY-lhy,LAX-lhx),'#15171c','#23262d','#3a8be0','#101114');
-  drawGlove(rhx,rhy,30,Math.atan2(RAY-rhy,RAX-rhx),'#1d3c6e','#2f63b0',GOLD,'#173156');
+  drawGripHand(lhx,lhy,dx,dy,LAX,LAY,36,'#15171c','#262a32','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
+  drawGripHand(rhx,rhy,dx,dy,RAX,RAY,38,'#1d3c6e','#2f63b0',GOLD);        // 오른손: 쓰바 바로 아래를 감싸 쥠
 
   // ── 베기 이펙트: 칼날이 실제로 지나간 자리를 따라가는 하늘색 궤적 ──
   if(t>0.18 && t<0.56){

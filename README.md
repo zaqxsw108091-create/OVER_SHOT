@@ -444,7 +444,7 @@ if (!swingHitDone && t - swingT >= _impactMs) { applyMelee(); swingHitDone = tru
 - The curved blade is a **filled outline built from 22 steps per side**, where each point is offset by `Math.sin(t·π)·9` perpendicular to the blade direction (the blade also narrows toward the tip). A sine gives maximum curvature at the mid-blade and zero curvature at both ends — exactly matching the geometry of a real katana (shinogi-zukuri profile).
 - The **hamon** (temper line) uses a high-frequency sine (`Math.PI * 9`, giving 4.5 full waves over the blade length) at very low amplitude (1.8 px) and low opacity (0.48). This is physically accurate: the hamon in a real sword is a 1–3mm crystalline boundary visible as a wavy bright line.
 - The katana uses a **different impact timing** (200 ms) from the hammer (210 ms) via a dynamic constant in `loop()`. The katana's `_easeIn` acceleration peaks earlier in its shorter total duration (500 ms vs. 420 ms), so 200 ms correctly aligns damage with the visual cut.
-- Two separate hand positions (`px+dx*(-8)` for the right hand near the guard, `px-dx*60` for the left hand near the pommel) implement the **two-handed grip** characteristic of Japanese sword technique (kenjutsu).
+- Two separate hand positions (`px-dx*24` for the right hand just below the guard, `px-dx*96` for the left hand at the pommel, with a hand's width of handle visible between them) implement the **two-handed grip** characteristic of Japanese sword technique (kenjutsu). Each hand is drawn as a fist wrapped around the handle (`drawGripHand`): four fingers cross the handle to the far side while the back of the hand and knuckles face the forearm, and the forearms come up from below on either side so they do not cover the handle.
 
 ---
 
