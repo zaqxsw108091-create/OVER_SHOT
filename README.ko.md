@@ -37,6 +37,7 @@
 - **카타나 "RISING DRAGON"** (Kage) — 하늘색 발광선이 있는 칼날과 검정·금색 쓰바, 화면을 가로질러 겨눈 자세. 3단계 사무라이 베기 (겨눔 자세 → 上段 → 袈裟斬り) + 하늘색 베기 궤적.
 
 ### 사격 연출
+- 총 자세: 쏘지 않을 때 소총·저격총은 **로우 레디**(개머리판은 어깨에, 총구는 아래로) 자세로 듭니다. 쏘면 약 0.1초 만에 **견착 조준**(수평으로 눈 가까이, 조준점 근처를 겨눔, 흔들림 감소) 자세로 올라가고, 마지막 발사 후 약 0.65초가 지나면 약 0.35초에 걸쳐 다시 내려옵니다. 두 자세 사이는 부드럽게 이어지며(smoothstep), 중간에 살짝 들리고 기울어져 딱딱하게 튀지 않습니다.
 - 쏠 때마다: 좌우로 살짝 흔들리는 반동, 탄피 배출구의 노리쇠 왕복, 튀어나가는 탄피, 총구 연기, 조준점까지 순간적으로 보이는 총알 빛줄기, 맞은 곳의 불꽃·먼지, 맞은 적이 하얗게 번쩍이며 살짝 밀려남. 처치한 적은 쓰러지며 사라짐.
 - 재장전: 총을 기울이고 빈 탄창이 빠진 뒤 새 탄창을 끼우고 장전 손잡이를 당김. 저격총은 쏠 때마다 오른손으로 노리쇠를 조작.
 - 미사일 스킬: 포드가 뒤로 튀며 번쩍이고, 떠 있는 홀로그램이 READY → LAUNCH → 충전 %로 바뀜.
@@ -106,13 +107,13 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,660 lines, single file)
+├── game.js           # Complete game engine (~1,690 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
-- `game.js` — 게임 엔진 전체 (약 1,660줄, 파일 하나)
+- `game.js` — 게임 엔진 전체 (약 1,690줄, 파일 하나)
 - `GAME_GUIDE.md` — 전체 기능과 플레이 설명서 (한국어)
 
 ### `game.js` 한눈에 보기

@@ -130,7 +130,7 @@ function startGame(){
   recoilAmt=0; shake=0; swingHitDone=true;
   abilActive=false; abilReady=true; abilCdEnd=0;
   adsActive=false; iaiFlash=0;
-  fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true;
+  fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true; aimBlend=0;
   el('abilName').textContent = hero.ability + ' [E]';
   el('ammoVal').textContent = hero.fireMode==='melee' ? '∞' : ammo;
   spawnWave(6);
@@ -222,6 +222,16 @@ function quitToMenu(){
 const gunFx={ muzzle:null, eject:null, pod:null };   // 무기를 그릴 때 화면 좌표를 기록
 let fxCasings=[], fxSmoke=[], fxImpacts=[], fxTracers=[], fxDead=[];
 let recoilJit=0, reloadT=0, missileFireT=-1e9, sniperEjected=true;
+// 총 자세: 0 = 로우 레디(평소, 총구를 아래로 내려 든 자세), 1 = 견착 조준(쏠 때, 어깨에 붙여 수평으로 겨눔)
+let aimBlend=0;
+const _smooth=u=>u*u*(3-2*u);
+function gunPose(low,aim){
+  const A=_smooth(Math.max(0,Math.min(1,aimBlend))), mid=Math.sin(A*Math.PI);
+  return { A,
+    x:_lerp(low[0],aim[0],A),
+    y:_lerp(low[1],aim[1],A) - mid*12,          // 올리는 도중 살짝 위로 휘어 올라감
+    r:_lerp(low[2],aim[2],A) + mid*0.05 };      // 전환 도중 총이 살짝 기울었다가 바로 섬
+}
 const RELOAD_MS=900;
 function spawnCasing(big){
   const p=gunFx.eject; if(!p) return;
@@ -239,9 +249,7 @@ function addImpact(off,dist,kind){
     kind, t:performance.now(), seed:Math.random() });
 }
 function addTracer(off,sn){
-  const m = (adsActive && sn) ? {x:W/2, y:H*0.95} : gunFx.muzzle;
-  if(!m) return;
-  fxTracers.push({ x0:m.x, y0:m.y, x1:W/2+off, y1:H/2, t:performance.now(), sn });
+  fxTracers.push({ x1:W/2+off, y1:H/2, t:performance.now(), sn });
 }
 function updateFx(dt){
   const s=dt/1000, now=performance.now();
@@ -278,6 +286,9 @@ function drawWorldFx(now){
 function drawTracers(now){
   for(const tr of fxTracers){
     const life=tr.sn?140:60, f=(now-tr.t)/life; if(f<0||f>=1) continue;
+    // 시작점은 지금 총구 위치 (총을 들어 올리는 중이어도 총구에서 나가 보이게)
+    const m=(adsActive && tr.sn) ? {x:W/2, y:H*0.95} : (gunFx.muzzle || {x:W/2, y:H});
+    tr.x0=m.x; tr.y0=m.y;
     const a0=Math.min(1,f*1.2)*0.6, a1=Math.min(1,0.35+f*1.2);
     const x0=_lerp(tr.x0,tr.x1,a0), y0=_lerp(tr.y0,tr.y1,a0), x1=_lerp(tr.x0,tr.x1,a1), y1=_lerp(tr.y0,tr.y1,a1);
     ctx.save(); ctx.globalAlpha=Math.max(0,1-f);
@@ -826,7 +837,8 @@ function drawHand(hx,hy,r, glove='#11151f', top='#1c2333', ring){
 function drawWeapon(){
   const now=performance.now();
   const moving = keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
-  const amp = moving?1:0.4;
+  const gun = hero.weapon==='rifle' || hero.weapon==='sniper';
+  const amp = (moving?1:0.4) * (gun ? 1-0.65*_smooth(aimBlend) : 1);   // 겨누는 중엔 흔들림이 줄어듦
   // 항상 살아있는 손맛 흔들림
   const swayX = Math.sin(now*0.0042)*9*amp;
   const swayY = (moving ? Math.abs(Math.sin(now*0.0084))*16 : Math.sin(now*0.0018)*6);
@@ -853,10 +865,12 @@ function drawRifle(now){
   const charge=abilCharge(now);
   const mt=now-muzzle, lt=now-missileFireT;
   const R=reloadAnim(now);
+  // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
+  const P=gunPose([335,-135,-0.22],[230,-330,0.10]);
   ctx.save();
-  ctx.translate(300*s,(-170+R.tilt*40)*s);
-  ctx.rotate(0.30 + k*0.10 + recoilJit*k - R.tilt*0.28);
-  ctx.scale(s,s);
+  ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
+  ctx.rotate(P.r + k*0.10 + recoilJit*k - R.tilt*0.20);
+  ctx.scale(s*(1+0.15*P.A),s*(1+0.15*P.A));   // 견착하면 총이 얼굴 가까이 와서 커 보임
   ctx.translate(k*34, k*5);
   // 화면 좌표 기록 (탄피·연기·총알 궤적이 여기서 나감)
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
@@ -1032,10 +1046,12 @@ function drawSniper(now){
   const RHX=_lerp(144,bx+4,handB), RHY=_lerp(66,by+2,handB);
   const LHX=_lerp(-120,52,R.hand), LHY=_lerp(22,120+Math.min(R.magDy,90),R.hand);
 
+  // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
+  const P=gunPose([335,-125,-0.20],[245,-320,0.08]);
   ctx.save();
-  ctx.translate(300*s,(-160+R.tilt*40)*s);
-  ctx.rotate(0.27 + k*0.08 + recoilJit*k - R.tilt*0.26);
-  ctx.scale(s,s);
+  ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
+  ctx.rotate(P.r + k*0.08 + recoilJit*k - R.tilt*0.20);
+  ctx.scale(s*(1+0.15*P.A),s*(1+0.15*P.A));   // 견착하면 총이 얼굴 가까이 와서 커 보임
   ctx.translate(k*30, k*6);
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
   gunFx.muzzle=tp(-414,0); gunFx.eject=tp(112,-20); gunFx.pod=null;
@@ -1611,6 +1627,13 @@ function loop(t){
     updateMissiles(dt);
     updateAbility(t, dt);
     updateFx(dt);
+    // 총 자세 전환: 쏘는 중·방금 쏜 뒤엔 견착(빠르게 올림), 아니면 로우 레디(천천히 내림)
+    if(hero.fireMode!=='melee'){
+      const nowP=performance.now(), hold=hero.weapon==='sniper'?1200:650;
+      let target=(firing || nowP-muzzle<hold || nowP-missileFireT<700) ? 1 : 0;
+      if(reloading) target=Math.min(target,0.35);
+      aimBlend += (target-aimBlend)*Math.min(1, target>aimBlend ? dt/55 : dt/170);
+    }
   }
   // 반동·흔들림 감쇠 (시간 기반) — 반동은 클수록 빨리 돌아옴
   recoilAmt = Math.max(0, recoilAmt - dt*(0.0035 + recoilAmt*0.006));
