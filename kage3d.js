@@ -14,13 +14,13 @@ const Kage3D = (() => {
   // 손 모델(장갑 낀 손 하나, 주먹으로 자루를 쥔 자세)을 칼 자루에 맞추는 값 — 손 모델 좌표로 직접 측정
   //  c: 주먹이 쥔 자루 축의 가운데, a: 자루 축(칼끝 쪽), q: 팔 보호대 끝(구멍) 가운데, qr: 그 구멍 반지름, scale: 크기 배율
   //  (모델 속 자루 반지름 0.033 × 배율 1.25 ≈ 칼 자루 반지름 0.029 × GRIP_THICK 1.4 → 손가락이 자루에 딱 감김)
-  //  두 손: y = 칼 자루 위치(쓰바 면에서 폼멜 쪽으로 음수), mirror = 거울상(왼손은 오른손을 뒤집어 씀)
+  //  두 손: y = 칼 자루 위치(쓰바 면에서 폼멜 쪽으로 음수), mirror = 거울상(같은 손 모델을 한쪽은 그대로, 한쪽은 뒤집어 씀)
   //  dir = 팔이 향할 화면 방향 [x 오른쪽, y 위쪽, z 보는 사람 쪽] — 칼을 어떻게 돌려도 팔은 늘 몸(화면 아래) 쪽으로
   //        (손목이 돌아가는 것처럼, 자루를 축으로 손을 돌려 팔 방향을 이쪽에 가장 가깝게 맞춤)
   const HAND_FIT = {
     c: [0.1523, -0.0487, -0.0747], a: [-0.1917, 0.8808, 0.4330], q: [-0.016, -0.365, -0.473], qr: 0.12, scale: 1.25,
-    right: { y: -0.088, dir: [ 0.30, -1, -0.15], mirror: false },
-    left:  { y: -0.445, dir: [-0.10, -1, -0.15], mirror: true  },
+    right: { y: -0.088, dir: [ 0.30, -1, -0.15], mirror: true  },
+    left:  { y: -0.445, dir: [-0.10, -1, -0.15], mirror: false },
   };
 
   // 모델 치수 (모델 좌표, 칼끝이 +Y). 직접 측정한 값
@@ -336,10 +336,11 @@ void main(){
     const cr = Math.cos(o.roll), sr = Math.sin(o.roll);
     const e = [w0[0]*cr+n0[0]*sr, w0[1]*cr+n0[1]*sr, w0[2]*cr+n0[2]*sr];
     const f = [u[1]*e[2]-u[2]*e[1], u[2]*e[0]-u[0]*e[2], u[0]*e[1]-u[1]*e[0]];   // u×e : 보는 사람 쪽 면
-    // 모델 축 → 화면 픽셀: 모델 +X가 날(edge, 휘어진 바깥쪽), +Y가 칼끝, +Z가 무늬 있는 면(자루 마름모·하바키 보석)
-    // 무늬 있는 면이 플레이어 쪽을 보도록 좌우 거울상으로 놓는다 (칼은 좌우 대칭에 가까워 티가 나지 않음)
+    // 모델 축 → 화면 픽셀: 모델 -X가 날(edge — 칼날이 휘어진 바깥쪽, 더 얇은 쪽), +Y가 칼끝, +Z가 무늬 있는 면(자루 마름모·하바키 보석)
+    // 날(-X)을 e(베는 방향 = 앞장서는 쪽)로 보낸다 → 모델 +X는 -e. 회전만 쓰므로 거울상 없음
     const D = v => [ (M.a*v[0] - M.c*v[1])*o.unit, (M.b*v[0] - M.d*v[1])*o.unit, v[2]*sc*o.unit ];
-    const B = [D(e), D(u), D(f)];
+    const ex = e.map(x => -x);
+    const B = [D(ex), D(u), D(f)];
     const T = [M.a*o.px + M.c*o.py + M.e, M.b*o.px + M.d*o.py + M.f, 0];
     const items = [{ m: st.blade, cols: B, T, glow: o.glow ?? 1, glint: o.glint ?? -9 }];
     let wrists = {};
@@ -348,7 +349,7 @@ void main(){
       const inv = M.inverse();
       const toCtx = (cols, Tp, p) => { const r = mulMV(cols, p); const x = Tp[0]+r[0], y = Tp[1]+r[1]; return [inv.a*x+inv.c*y+inv.e, inv.b*x+inv.d*y+inv.f]; };
       for (const side of ['right','left']){
-        const h = HAND_FIT[side], R = handRot(h, { e, f });
+        const h = HAND_FIT[side], R = handRot(h, { e: ex, f });
         const Hc = mulMM(B, R);
         const off = mulMV(R, HAND_FIT.c.map(x => -x)); off[1] += h.y;
         const bo = mulMV(B, off), HT = [T[0]+bo[0], T[1]+bo[1], T[2]+bo[2]];
