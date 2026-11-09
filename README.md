@@ -607,10 +607,10 @@ function explode(x, y) {
 **Where:** `updateAbility(now)` · `#abilBar` DOM element
 
 ```js
-function updateAbility(now) {
+function updateAbility(now, dt) {
   // Active ability tick (heal)
   if (abilActive) {
-    if (hero.abilType === 'heal') player.hp = Math.min(player.maxhp, player.hp + 0.18);
+    if (hero.abilType === 'heal') player.hp = Math.min(player.maxhp, player.hp + HEAL_PER_SEC * dt / 1000);  // HEAL_PER_SEC = 10.8
     if (now >= abilEnd) { abilActive = false; abilCdEnd = now + hero.abilCd; }
   }
   if (!abilActive && !abilReady && now >= abilCdEnd) abilReady = true;
@@ -627,7 +627,7 @@ function updateAbility(now) {
 
 **Why this approach:**
 - Three boolean states (`abilActive / abilReady / charging`) are collapsed into **one `pct` value** that drives the width of a CSS bar. This means the bar shows meaningful progress in all three states: draining during active use, filling during cooldown, full when ready.
-- The heal ability applies `+0.18 HP per frame` inside `updateAbility`, which is called every `requestAnimationFrame` tick. At 60 fps this is ~10.8 HP/s, giving a smooth animated heal rather than an instant jump. (Because it is per frame, not per second, the heal rate scales with the display's frame rate — a known simplification.)
+- The heal ability adds `HEAL_PER_SEC × dt` (10.8 HP per second) inside `updateAbility`, which is called every `requestAnimationFrame` tick, giving a smooth animated heal rather than an instant jump. Because it is scaled by the frame time `dt`, the heal rate is the same on 60 Hz and 144 Hz displays. (It used to add a fixed +0.18 HP per frame, which healed faster on high-refresh displays.)
 - `hero.abilDur` and `hero.abilCd` are per-hero values defined in the `HEROES` array, so changing cooldown timings requires editing only one place — no magic numbers scattered through the ability code.
 
 ---

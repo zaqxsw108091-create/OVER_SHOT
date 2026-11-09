@@ -321,9 +321,10 @@ function explode(x,y){
     if(d<R){ e.hp -= DMG*(1-d/R); if(e.hp<=0) killEnemy(e); }
   }
 }
-function updateAbility(now){
+const HEAL_PER_SEC = 10.8; // 회복 스킬: 초당 회복량 (모니터 주사율과 무관)
+function updateAbility(now, dt){
   if(abilActive){
-    if(hero.abilType==='heal'){ player.hp=Math.min(player.maxhp,player.hp+0.18); }
+    if(hero.abilType==='heal'){ player.hp=Math.min(player.maxhp,player.hp+HEAL_PER_SEC*dt/1000); }
     if(now>=abilEnd){ abilActive=false; abilCdEnd=now+hero.abilCd; }
   }
   if(!abilActive && !abilReady && now>=abilCdEnd){ abilReady=true; }
@@ -1138,7 +1139,7 @@ function loop(t){
     updatePlayer(dt);
     updateEnemies(dt,t);
     updateMissiles(dt);
-    updateAbility(t);
+    updateAbility(t, dt);
   }
   // 반동·흔들림 감쇠 (시간 기반)
   recoilAmt = Math.max(0, recoilAmt - dt/200);

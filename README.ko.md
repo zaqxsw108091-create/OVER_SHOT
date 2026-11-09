@@ -616,10 +616,10 @@ function explode(x, y) {
 **위치:** `updateAbility(now)` · `#abilBar` DOM 요소
 
 ```js
-function updateAbility(now) {
+function updateAbility(now, dt) {
   // Active ability tick (heal)
   if (abilActive) {
-    if (hero.abilType === 'heal') player.hp = Math.min(player.maxhp, player.hp + 0.18);
+    if (hero.abilType === 'heal') player.hp = Math.min(player.maxhp, player.hp + HEAL_PER_SEC * dt / 1000);  // HEAL_PER_SEC = 10.8
     if (now >= abilEnd) { abilActive = false; abilCdEnd = now + hero.abilCd; }
   }
   if (!abilActive && !abilReady && now >= abilCdEnd) abilReady = true;
@@ -636,7 +636,7 @@ function updateAbility(now) {
 
 **이 방식을 쓴 이유:**
 - 세 가지 상태(`abilActive / abilReady / 충전 중`)를 **`pct` 값 하나**로 합쳐 CSS 막대의 폭을 정합니다. 그래서 막대가 세 상태 모두에서 의미 있게 보입니다. 사용 중에는 줄어들고, 대기 중에는 차오르고, 준비되면 가득 찹니다.
-- 치유 스킬은 매 `requestAnimationFrame`마다 불리는 `updateAbility` 안에서 **프레임당 +0.18 HP**를 회복합니다. 60 fps에서는 초당 약 10.8 HP이며, 한 번에 확 오르지 않고 부드럽게 회복됩니다. (초당이 아니라 프레임당이라서 회복 속도가 모니터 주사율에 따라 달라집니다 — 알고 있는 단순화입니다.)
+- 치유 스킬은 매 `requestAnimationFrame`마다 불리는 `updateAbility` 안에서 `HEAL_PER_SEC × dt`(**초당 10.8 HP**)만큼 회복합니다. 한 번에 확 오르지 않고 부드럽게 회복됩니다. 프레임 사이 시간 `dt`를 곱하므로 60Hz 모니터와 144Hz 모니터에서 회복 속도가 같습니다. (예전에는 프레임마다 +0.18 HP를 더해서, 주사율이 높은 모니터일수록 더 빨리 회복되었습니다.)
 - `hero.abilDur`와 `hero.abilCd`는 `HEROES` 배열에 영웅별로 정의되어 있어서, 대기 시간을 바꾸려면 한 곳만 고치면 됩니다 — 스킬 코드 곳곳에 숫자가 흩어져 있지 않습니다.
 
 ---
