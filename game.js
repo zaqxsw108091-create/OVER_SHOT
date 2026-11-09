@@ -1630,13 +1630,26 @@ function drawKatana(now){
   const wrist=(hx,hy,ax,ay,r)=>{ let nx=-dy, ny=dx; if((ax-hx)*nx+(ay-hy)*ny<0){ nx=-nx; ny=-ny; }
     return [hx+nx*r*0.8, hy+ny*r*0.8]; };
   const [lwx,lwy]=wrist(lhx,lhy,LAX,LAY,LR), [rwx,rwy]=wrist(rhx,rhy,RAX,RAY,RR);
-  armTo(LAX,LAY,lwx,lwy,LR*1.25,'#15171c','#2a2e36');   // 왼팔 (검은 소매)
-  armTo(RAX,RAY,rwx,rwy,RR*1.3,'#1d3c6e','#2f63b0');    // 오른팔 (파란 갑옷 소매)
+  const hands3D = use3D && Kage3D.handsReady;           // 3D 손 모델(장갑+팔 보호대)을 쓰면 2D 손·팔은 그리지 않음
+  if(!hands3D){
+    armTo(LAX,LAY,lwx,lwy,LR*1.25,'#15171c','#2a2e36');   // 왼팔 (검은 소매)
+    armTo(RAX,RAY,rwx,rwy,RR*1.3,'#1d3c6e','#2f63b0');    // 오른팔 (파란 갑옷 소매)
+  }
 
   if(use3D){
     // 베는 동안: 발광선이 강해지고, 날을 따라 섬광이 한 번 훑고 지나감
     const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.42)/0.22) : 0;
     Kage3D.draw(ctx,{ px, py, dx, dy, lean:K[3], roll:K[4], unit:U3,
+      // 3D 손일 때: 팔 보호대 끝에서 화면 밖까지 소매(어두운 남색 천)를 이어 그림 (3D 손보다 뒤)
+      under: hands3D ? (wr)=>{
+        for(const k of ['left','right']){
+          const a=wr[k]; if(!a) continue;
+          const sx=a.end[0]-a.dir[0]*a.r*0.5, sy=a.end[1]-a.dir[1]*a.r*0.5;   // 보호대 안쪽에서 시작 (틈이 안 보이게)
+          ctx.save(); ctx.lineCap='butt';
+          armTo(sx,sy,sx+a.dir[0]*900,sy+a.dir[1]*900,a.r*1.7,'#1a2233','#26324a');
+          ctx.restore();
+        }
+      } : null,
       glow: 1.0 + 0.12*Math.sin(now*0.004) + 1.1*cutGlow,
       glint: (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : -9 });
   } else {
@@ -1724,8 +1737,10 @@ function drawKatana(now){
   }   // 2D 칼 끝
 
   // 두 손 — 오른손 파란 장갑(금 테두리), 왼손 검은 반장갑(손가락 끝이 보임)
-  drawGripHand(lhx,lhy,dx,dy,LAX,LAY,LR,'#1b1e25','#2b2f39','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
-  drawGripHand(rhx,rhy,dx,dy,RAX,RAY,RR,'#1d3c6e','#2f63b0','#c9a24a');   // 오른손: 쓰바 바로 아래를 감싸 쥠
+  if(!hands3D){
+    drawGripHand(lhx,lhy,dx,dy,LAX,LAY,LR,'#1b1e25','#2b2f39','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
+    drawGripHand(rhx,rhy,dx,dy,RAX,RAY,RR,'#1d3c6e','#2f63b0','#c9a24a');   // 오른손: 쓰바 바로 아래를 감싸 쥠
+  }
 
   // ── 베기 이펙트: 칼날이 실제로 지나간 자리를 따라가는 하늘색 궤적 ──
   if(t>0.18 && t<0.56){
