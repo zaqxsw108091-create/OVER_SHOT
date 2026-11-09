@@ -31,10 +31,10 @@ Enemies, missiles, and explosions are depth-sorted and rendered as camera-facing
 
 ### Weapon View Models
 Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, animated using easing helpers (`_easeIn`, `_easeOut`, `_lerp`):
-- **Assault Rifle** — recoil bounce, muzzle flash
-- **Sniper Rifle** — bolt-action animation, ADS scope overlay (right-click)
-- **Hammer** — overhead vertical slam with motion-blur arc
-- **Katana** — three-phase samurai swing (中段 → 上段 → 袈裟斬り)
+- **Assault Rifle "RAZOR-FX"** (Spark) — shown side-on with an under-barrel missile pod, holographic sight and orange glow lines. The magazine window shows remaining ammo, and the pod's three missiles slide out as the missile skill recharges (a "READY" hologram appears when it is ready). Recoil kick, muzzle flash.
+- **Sniper Rifle "LUX-VALOR"** (Medica) — white/blue body with a glass tube of swirling heal fluid and a gold muzzle with a glowing crystal. Bolt-action animation, ADS scope overlay (right-click).
+- **Hammer "SENTINEL MAUL"** (Titan) — spiked steel head with four glowing blue energy cells. Overhead vertical slam with motion-blur arc; the Barrier skill is drawn as a blue hexagon shield.
+- **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba, held across the screen. Three-phase samurai swing (guard pose → 上段 → 袈裟斬り) with a cyan slash trail.
 
 ### Collision Detection
 - AABB-style wall sliding: X and Y axes tested independently so the player glides along walls instead of stopping dead.
@@ -99,7 +99,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,190 lines, single file)
+├── game.js           # Complete game engine (~1,440 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
@@ -313,16 +313,17 @@ ctx.translate(sx, sy);
 // … draw world …
 ctx.restore();
 
-// Weapon recoil (drawWeapon / drawRifle)
-ctx.translate(8, recoilAmt * 42);   // push weapon down on recoil
-ctx.rotate(tilt - recoilAmt * 0.13);
+// Weapon recoil (drawRifle)
+ctx.rotate(0.30 + recoilAmt * 0.07);          // muzzle kicks up
+ctx.scale(s, s);
+ctx.translate(recoilAmt * 26, recoilAmt * 4); // gun slides back toward the shoulder
 ```
 
 **Why this approach:**
 - `shake` drives random pixel offsets applied to the **world layer only** (`ctx.save/restore` wrap), so the HUD and weapon model are unaffected and always readable.
 - Linear decay (`value - dt/constant`) is simpler than spring physics and produces the right feel: a sharp initial jolt that quickly settles. `dt` keeps the decay frame-rate-independent.
 - `Math.max(shake, newValue)` means overlapping hits accumulate without a hard reset, so rapid gunfire produces sustained shake rather than resetting to 0 between each shot.
-- Recoil moves the weapon **downward** (`+y`) and rotates the muzzle up, matching how real firearms behave. The `_easeIn`/`_easeOut` helpers used in swing animations are not needed here because linear decay already gives the right feel.
+- Recoil slides the gun **back toward the shoulder** (along the barrel) and tips the muzzle up, matching how real firearms behave. The `_easeIn`/`_easeOut` helpers used in swing animations are not needed here because linear decay already gives the right feel.
 
 ---
 
@@ -400,21 +401,23 @@ if (t > 0.25 && t < 0.54) {
 
 ```js
 // Three animation phases, same single-angle system as hammer
-let a = 0.28 + Math.sin(now * 0.0018) * 0.03;  // chudan idle (中段)
+let a = -1.45 + Math.sin(now * 0.0018) * 0.03;  // guard pose: blade held across the screen
 
 if (swingT && now - swingT < KATANA_MS) {
   const t = (now - swingT) / KATANA_MS;
-  if      (t < 0.20) a = _lerp( 0.28,  0.82, _easeOut(t / 0.20));         // jodan (上段)
-  else if (t < 0.52) a = _lerp( 0.82, -2.00, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
-  else               a = _lerp(-2.00,  0.28, _easeOut((t-0.52) / 0.48));  // return to chudan
+  if      (t < 0.20) a = _lerp(-1.45,  0.50, _easeOut(t / 0.20));         // jodan (上段)
+  else if (t < 0.52) a = _lerp( 0.50, -2.30, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
+  else               a = _lerp(-2.30, -1.45, _easeOut((t-0.52) / 0.48));  // return to guard pose
 }
 
 // Curved blade — 22 steps with sine offset for authentic katana curvature
-for (let i = 0; i <= 22; i++) {
-  const tb = i/22, curve = Math.sin(tb * Math.PI) * 6;  // peak curve at midpoint
-  const bx = px + dx*(handleL + tb*(bladeL-handleL)) + dy*curve;
-  const by = py + dy*(handleL + tb*(bladeL-handleL)) - dx*curve;
-}
+const P = (tb, off) => {               // point on the blade, pushed sideways by `off`
+  const L = B0 + tb*(bladeL-B0), c = Math.sin(tb * Math.PI) * 9 + off;  // peak curve at midpoint
+  return [px + dx*L + dy*c, py + dy*L - dx*c];
+};
+// filled outline: spine side out to the tip, edge side back (blade narrows toward the tip)
+for (let i = 0; i <= 22; i++)  ctx.lineTo(...P(i/22, -(8.6 - 2.6*i/22)));
+for (let i = 22; i >= 0; i--)  ctx.lineTo(...P(i/22,  (8.6 - 2.6*i/22)));
 
 // Hamon (刃文) — the temper line unique to Japanese swords
 ctx.strokeStyle = 'rgba(190,220,255,0.48)';
@@ -429,10 +432,10 @@ if (!swingHitDone && t - swingT >= _impactMs) { applyMelee(); swingHitDone = tru
 ```
 
 **Why this approach:**
-- The curved blade is drawn with a **22-step polyline** where each vertex is offset by `Math.sin(t·π)·6` perpendicular to the blade direction. A sine gives maximum curvature at the mid-blade and zero curvature at both ends — exactly matching the geometry of a real katana (shinogi-zukuri profile).
+- The curved blade is a **filled outline built from 22 steps per side**, where each point is offset by `Math.sin(t·π)·9` perpendicular to the blade direction (the blade also narrows toward the tip). A sine gives maximum curvature at the mid-blade and zero curvature at both ends — exactly matching the geometry of a real katana (shinogi-zukuri profile).
 - The **hamon** (temper line) uses a high-frequency sine (`Math.PI * 9`, giving 4.5 full waves over the blade length) at very low amplitude (1.8 px) and low opacity (0.48). This is physically accurate: the hamon in a real sword is a 1–3mm crystalline boundary visible as a wavy bright line.
 - The katana uses a **different impact timing** (200 ms) from the hammer (210 ms) via a dynamic constant in `loop()`. The katana's `_easeIn` acceleration peaks earlier in its shorter total duration (500 ms vs. 420 ms), so 200 ms correctly aligns damage with the visual cut.
-- Two separate hand positions (`px+dx*(-8)` for the right hand near the guard, `px-dx*32` for the left hand near the pommel) implement the **two-handed grip** characteristic of Japanese sword technique (kenjutsu).
+- Two separate hand positions (`px+dx*(-8)` for the right hand near the guard, `px-dx*60` for the left hand near the pommel) implement the **two-handed grip** characteristic of Japanese sword technique (kenjutsu).
 
 ---
 
@@ -527,21 +530,26 @@ function iaiSlash() {
   const ca = Math.cos(player.ang), sa = Math.sin(player.ang);
   const ox = player.x, oy = player.y;  // remember starting position
 
-  // Forward dash — step 0.15 units at a time, stop at wall (max 2.0)
+  // Forward dash — 0.15-unit steps measured from the start point, stop at wall (max 2.0)
   for (let s = 0.15; s <= 2.0; s += 0.15) {
-    const nx = player.x + ca*s, ny = player.y + sa*s;
+    const nx = ox + ca*s, ny = oy + sa*s;
     if (!isWall(nx, ny)) { player.x = nx; player.y = ny; }
     else break;
   }
+  const dashLen = Math.hypot(player.x - ox, player.y - oy);
 
-  // Arc AOE damage from the dashed position (2.8 unit radius, ±1.15 rad arc)
+  // Damage: enemies the dash passed through + enemies in the arc ahead (2.8 radius, ±1.15 rad)
   for (const e of [...enemies]) {
+    const ex = e.x - ox, ey = e.y - oy;
+    const along = ex*ca + ey*sa, side = Math.abs(ex*sa - ey*ca);
+    const onPath = along > 0 && along <= dashLen && side < 0.9;
     const dx = e.x - player.x, dy = e.y - player.y;
-    if (Math.hypot(dx, dy) > 2.8) continue;
     let ang = Math.atan2(dy, dx) - player.ang;
     while (ang < -Math.PI) ang += 2*Math.PI;
     while (ang >  Math.PI) ang -= 2*Math.PI;
-    if (Math.abs(ang) > 1.15) continue;
+    const inArc = Math.hypot(dx, dy) <= 2.8 && Math.abs(ang) <= 1.15;
+    if (!onPath && !inArc) continue;
+    if (blockedByWall(ox, oy, e.x, e.y) && blockedByWall(player.x, player.y, e.x, e.y)) continue;
     e.hp -= 135;
     if (e.hp <= 0) killEnemy(e);
   }
@@ -557,6 +565,7 @@ function iaiSlash() {
 - **Three-phase sequence — dash → slash → return**: this matches the actual iaijutsu (居合) principle: draw the blade, cut, and resheath from the exact same stance without moving your feet. The player flashes forward, damages enemies at the dashed position, then snaps back instantly.
 - The dash uses **incremental steps of 0.15 units** rather than a single teleport so the same `isWall` check that governs player movement naturally stops the dash at the first wall tile — Kage can never clip through thin walls.
 - Saving the origin **before** the dash (`ox, oy`) and restoring it **after** the AOE check means damage is correctly evaluated from the dashed position (reaching enemies up to 2.8 units ahead), while the player always ends up back at the starting point.
+- Each dash step is measured **from the starting point** (`ox + ca*s`). An earlier version added each step to the already-moved position, so the dash actually flew about 13 units until it hit a wall and the slash usually missed the enemy right in front; this was fixed. Enemies the dash passes through (within 0.9 units of the path) are cut too, so close targets are not skipped.
 - The max dash distance was reduced from 2.5 → **2.0 units** alongside the return mechanic. Without return, a longer dash was needed to feel impactful; with instant return, a shorter dash keeps the skill readable and prevents Kage from accidentally dashing into a wall corner.
 - `[...enemies]` spread-copies the array before iteration so that `killEnemy` (which splices the array) does not corrupt the loop.
 - `Math.abs(ang) > 1.15` limits the arc to ~±66° — wide enough to catch enemies slightly to the side, narrow enough to require facing the target group.

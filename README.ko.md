@@ -31,10 +31,10 @@
 
 ### 무기 뷰 모델
 각 영웅의 무기는 `ctx.translate` / `ctx.rotate`로 코드에서 직접 그리며, 이징 함수(`_easeIn`, `_easeOut`, `_lerp`)로 움직입니다.
-- **돌격소총** — 반동 튕김, 총구 화염
-- **저격소총** — 볼트액션 애니메이션, 조준(ADS) 스코프 화면 (우클릭)
-- **해머** — 머리 위에서 수직으로 내리치기 + 모션 블러 호
-- **카타나** — 3단계 사무라이 베기 (中段 → 上段 → 袈裟斬り)
+- **돌격소총 "RAZOR-FX"** (Spark) — 옆모습이 보이게 들고 있으며, 총열 아래 미사일 포드, 홀로그램 조준경, 주황 발광 라인이 있습니다. 탄창 창에 남은 탄이 표시되고, 미사일 스킬이 충전될수록 포드의 미사일 3발이 밀려 나옵니다(준비되면 "READY" 홀로그램 표시). 반동, 총구 화염.
+- **저격소총 "LUX-VALOR"** (Medica) — 흰·파랑 몸체에 회복약이 소용돌이치는 유리관, 빛나는 결정이 달린 금장 총구. 볼트액션 애니메이션, 조준(ADS) 스코프 화면 (우클릭).
+- **해머 "SENTINEL MAUL"** (Titan) — 가시 달린 강철 머리에 파랗게 빛나는 에너지 셀 4개. 머리 위에서 수직으로 내리치기 + 모션 블러 호. 방벽 스킬은 파란 육각형 보호막으로 표시됩니다.
+- **카타나 "RISING DRAGON"** (Kage) — 하늘색 발광선이 있는 칼날과 검정·금색 쓰바, 화면을 가로질러 겨눈 자세. 3단계 사무라이 베기 (겨눔 자세 → 上段 → 袈裟斬り) + 하늘색 베기 궤적.
 
 ### 충돌 판정
 - AABB 방식 벽 미끄러짐: X축과 Y축을 따로 검사해서, 벽에 막혀 딱 멈추지 않고 벽을 따라 미끄러지듯 움직입니다.
@@ -101,13 +101,13 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,190 lines, single file)
+├── game.js           # Complete game engine (~1,440 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
-- `game.js` — 게임 엔진 전체 (약 1,190줄, 파일 하나)
+- `game.js` — 게임 엔진 전체 (약 1,440줄, 파일 하나)
 - `GAME_GUIDE.md` — 전체 기능과 플레이 설명서 (한국어)
 
 ### `game.js` 한눈에 보기
@@ -320,16 +320,17 @@ ctx.translate(sx, sy);
 // … draw world …
 ctx.restore();
 
-// Weapon recoil (drawWeapon / drawRifle)
-ctx.translate(8, recoilAmt * 42);   // push weapon down on recoil
-ctx.rotate(tilt - recoilAmt * 0.13);
+// Weapon recoil (drawRifle)
+ctx.rotate(0.30 + recoilAmt * 0.07);          // muzzle kicks up
+ctx.scale(s, s);
+ctx.translate(recoilAmt * 26, recoilAmt * 4); // gun slides back toward the shoulder
 ```
 
 **이 방식을 쓴 이유:**
 - `shake`는 **월드 화면에만** 무작위 픽셀 이동을 줍니다(`ctx.save/restore`로 감쌈). 그래서 HUD와 무기 모델은 흔들리지 않고 항상 잘 보입니다.
 - 선형 감소(`값 - dt/상수`)는 스프링 물리보다 단순하면서 원하는 느낌을 줍니다. 처음에 날카롭게 튀고 금방 가라앉습니다. `dt`를 써서 감소 속도도 프레임 속도와 무관합니다.
 - `Math.max(shake, newValue)`를 쓰므로 연속으로 맞아도 매번 초기화되지 않고 쌓입니다. 빠르게 연사하면 한 발마다 0으로 돌아가지 않고 흔들림이 이어집니다.
-- 반동은 무기를 **아래로**(`+y`) 밀고 총구를 위로 돌립니다 — 실제 총기가 움직이는 방식과 같습니다. 휘두르기 애니메이션에 쓰는 `_easeIn`/`_easeOut`은 여기서는 필요 없습니다. 선형 감소만으로 충분히 맞는 느낌이 나기 때문입니다.
+- 반동은 총을 총열 방향을 따라 **어깨 쪽으로** 밀고 총구를 위로 들어 올립니다 — 실제 총기가 움직이는 방식과 같습니다. 휘두르기 애니메이션에 쓰는 `_easeIn`/`_easeOut`은 여기서는 필요 없습니다. 선형 감소만으로 충분히 맞는 느낌이 나기 때문입니다.
 
 ---
 
@@ -409,21 +410,23 @@ if (t > 0.25 && t < 0.54) {
 
 ```js
 // Three animation phases, same single-angle system as hammer
-let a = 0.28 + Math.sin(now * 0.0018) * 0.03;  // chudan idle (中段)
+let a = -1.45 + Math.sin(now * 0.0018) * 0.03;  // guard pose: blade held across the screen
 
 if (swingT && now - swingT < KATANA_MS) {
   const t = (now - swingT) / KATANA_MS;
-  if      (t < 0.20) a = _lerp( 0.28,  0.82, _easeOut(t / 0.20));         // jodan (上段)
-  else if (t < 0.52) a = _lerp( 0.82, -2.00, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
-  else               a = _lerp(-2.00,  0.28, _easeOut((t-0.52) / 0.48));  // return to chudan
+  if      (t < 0.20) a = _lerp(-1.45,  0.50, _easeOut(t / 0.20));         // jodan (上段)
+  else if (t < 0.52) a = _lerp( 0.50, -2.30, _easeIn((t-0.20) / 0.32));   // kesa-giri strike
+  else               a = _lerp(-2.30, -1.45, _easeOut((t-0.52) / 0.48));  // return to guard pose
 }
 
 // Curved blade — 22 steps with sine offset for authentic katana curvature
-for (let i = 0; i <= 22; i++) {
-  const tb = i/22, curve = Math.sin(tb * Math.PI) * 6;  // peak curve at midpoint
-  const bx = px + dx*(handleL + tb*(bladeL-handleL)) + dy*curve;
-  const by = py + dy*(handleL + tb*(bladeL-handleL)) - dx*curve;
-}
+const P = (tb, off) => {               // point on the blade, pushed sideways by `off`
+  const L = B0 + tb*(bladeL-B0), c = Math.sin(tb * Math.PI) * 9 + off;  // peak curve at midpoint
+  return [px + dx*L + dy*c, py + dy*L - dx*c];
+};
+// filled outline: spine side out to the tip, edge side back (blade narrows toward the tip)
+for (let i = 0; i <= 22; i++)  ctx.lineTo(...P(i/22, -(8.6 - 2.6*i/22)));
+for (let i = 22; i >= 0; i--)  ctx.lineTo(...P(i/22,  (8.6 - 2.6*i/22)));
 
 // Hamon (刃文) — the temper line unique to Japanese swords
 ctx.strokeStyle = 'rgba(190,220,255,0.48)';
@@ -438,10 +441,10 @@ if (!swingHitDone && t - swingT >= _impactMs) { applyMelee(); swingHitDone = tru
 ```
 
 **이 방식을 쓴 이유:**
-- 휘어진 칼날은 **22단계 꺾은선**으로 그리며, 각 꼭짓점을 칼날 방향에 수직으로 `Math.sin(t·π)·6`만큼 밀어 냅니다. 사인 곡선은 칼날 가운데에서 가장 많이 휘고 양 끝에서는 휘지 않습니다 — 실제 카타나(시노기즈쿠리 형태)의 모양과 맞습니다.
+- 휘어진 칼날은 **한쪽에 22단계씩 점을 찍어 채운 윤곽**으로 그리며, 각 점을 칼날 방향에 수직으로 `Math.sin(t·π)·9`만큼 밀어 냅니다(칼끝으로 갈수록 날이 좁아짐). 사인 곡선은 칼날 가운데에서 가장 많이 휘고 양 끝에서는 휘지 않습니다 — 실제 카타나(시노기즈쿠리 형태)의 모양과 맞습니다.
 - **하몬**(刃文, 담금질 무늬)은 높은 주파수의 사인(`Math.PI * 9`, 칼날 길이에 4.5번 물결)을 아주 작은 진폭(1.8 px)과 낮은 불투명도(0.48)로 그립니다. 실제 칼의 하몬도 1~3mm 폭의 결정 경계가 물결 모양의 밝은 선으로 보이는 것이라 이에 맞췄습니다.
 - 카타나는 `loop()`의 동적 상수로 해머(210 ms)와 **다른 타격 시점**(200 ms)을 씁니다. 카타나의 `_easeIn` 가속은 전체 시간(500 ms vs 420 ms) 안에서 더 일찍 정점에 이르므로, 200 ms가 화면의 베는 순간과 피해를 정확히 맞춥니다.
-- 손 위치를 두 개 따로 두어(`px+dx*(-8)`은 코등이 근처 오른손, `px-dx*32`는 칼자루 끝 근처 왼손) 일본 검술(켄주츠) 특유의 **양손 잡기**를 표현했습니다.
+- 손 위치를 두 개 따로 두어(`px+dx*(-8)`은 코등이 근처 오른손, `px-dx*60`은 칼자루 끝 근처 왼손) 일본 검술(켄주츠) 특유의 **양손 잡기**를 표현했습니다.
 
 ---
 
@@ -536,21 +539,26 @@ function iaiSlash() {
   const ca = Math.cos(player.ang), sa = Math.sin(player.ang);
   const ox = player.x, oy = player.y;  // remember starting position
 
-  // Forward dash — step 0.15 units at a time, stop at wall (max 2.0)
+  // Forward dash — 0.15-unit steps measured from the start point, stop at wall (max 2.0)
   for (let s = 0.15; s <= 2.0; s += 0.15) {
-    const nx = player.x + ca*s, ny = player.y + sa*s;
+    const nx = ox + ca*s, ny = oy + sa*s;
     if (!isWall(nx, ny)) { player.x = nx; player.y = ny; }
     else break;
   }
+  const dashLen = Math.hypot(player.x - ox, player.y - oy);
 
-  // Arc AOE damage from the dashed position (2.8 unit radius, ±1.15 rad arc)
+  // Damage: enemies the dash passed through + enemies in the arc ahead (2.8 radius, ±1.15 rad)
   for (const e of [...enemies]) {
+    const ex = e.x - ox, ey = e.y - oy;
+    const along = ex*ca + ey*sa, side = Math.abs(ex*sa - ey*ca);
+    const onPath = along > 0 && along <= dashLen && side < 0.9;
     const dx = e.x - player.x, dy = e.y - player.y;
-    if (Math.hypot(dx, dy) > 2.8) continue;
     let ang = Math.atan2(dy, dx) - player.ang;
     while (ang < -Math.PI) ang += 2*Math.PI;
     while (ang >  Math.PI) ang -= 2*Math.PI;
-    if (Math.abs(ang) > 1.15) continue;
+    const inArc = Math.hypot(dx, dy) <= 2.8 && Math.abs(ang) <= 1.15;
+    if (!onPath && !inArc) continue;
+    if (blockedByWall(ox, oy, e.x, e.y) && blockedByWall(player.x, player.y, e.x, e.y)) continue;
     e.hp -= 135;
     if (e.hp <= 0) killEnemy(e);
   }
@@ -566,6 +574,7 @@ function iaiSlash() {
 - **돌진 → 베기 → 복귀의 3단계**: 실제 거합술(居合)의 원리 — 발을 움직이지 않고 같은 자세에서 칼을 뽑고, 베고, 다시 칼집에 넣는 것 — 에 맞췄습니다. 플레이어가 순간적으로 앞으로 나가 그 위치에서 적에게 피해를 주고, 곧바로 제자리로 돌아옵니다.
 - 돌진은 한 번에 순간이동하지 않고 **0.15 단위씩** 나아갑니다. 그래서 플레이어 이동에 쓰는 같은 `isWall` 검사가 첫 번째 벽 타일에서 돌진을 자연스럽게 멈추고, Kage가 얇은 벽을 뚫고 지나갈 수 없습니다.
 - 돌진 **전에** 출발 위치(`ox, oy`)를 저장하고 범위 판정 **뒤에** 되돌리므로, 피해는 돌진한 위치(앞쪽 최대 2.8 단위까지)에서 올바르게 계산되고 플레이어는 항상 출발점으로 돌아옵니다.
+- 돌진의 각 단계는 **출발점 기준**으로 계산합니다(`ox + ca*s`). 예전 버전은 이미 움직인 위치에 단계 거리를 계속 더해서, 실제로는 벽에 닿을 때까지 약 13칸을 날아가 바로 앞의 적을 거의 맞히지 못했습니다. 이 버그를 고쳤고, 돌진 경로에서 스쳐 지나간 적(경로 옆 0.9칸 안)도 함께 베어 가까운 적을 건너뛰지 않습니다.
 - 최대 돌진 거리는 복귀 기능을 넣으면서 2.5 → **2.0 단위**로 줄였습니다. 복귀가 없을 때는 시원하게 느껴지려면 더 긴 돌진이 필요했지만, 바로 돌아오는 지금은 짧은 돌진이 스킬을 알아보기 쉽게 하고 Kage가 실수로 벽 모서리에 박히는 것을 막습니다.
 - `[...enemies]`로 배열을 복사한 뒤 돌기 때문에, 배열에서 원소를 지우는 `killEnemy`가 반복문을 망가뜨리지 않습니다.
 - `Math.abs(ang) > 1.15`로 범위를 약 ±66°로 제한합니다 — 옆쪽에 조금 비켜 있는 적도 맞힐 만큼 넓고, 적 무리를 바라봐야 할 만큼 좁습니다.
