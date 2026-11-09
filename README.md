@@ -61,7 +61,7 @@ Rendered with the Canvas `evenodd` fill rule — a full-screen rectangle with a 
 | Input | Action |
 |---|---|
 | `W A S D` | Move |
-| Mouse move | Look (requires pointer lock) |
+| Mouse move | Look. Clicking the game locks the mouse to the screen; if the browser cannot lock it (some built-in or embedded browsers), the game switches to cursor mode — move the cursor to look, hold it at the left/right edge to keep turning |
 | `← →` | Turn the camera (when the mouse can't be used) |
 | Left click | Attack / Fire |
 | Right click | ADS scope aim *(Medica only)* |

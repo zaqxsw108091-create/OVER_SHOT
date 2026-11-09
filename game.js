@@ -157,23 +157,45 @@ document.addEventListener('keydown',e=>{ keys[e.code]=true;
   if(e.code==='KeyR') reload();
   if(e.code==='KeyE') useAbility();
   if(e.code==='KeyQ' && running && paused) quitToMenu();
+  // 커서 모드에서는 브라우저가 Esc를 처리해 주지 않으므로 직접 일시정지
+  if(e.code==='Escape' && lockless && running && !paused) setPaused(true);
 });
 document.addEventListener('keyup',e=>{ keys[e.code]=false; });
 
 // 포인터 락 (마우스 시점)
-cv.addEventListener('click',()=>{ if(running && document.pointerLockElement!==cv) cv.requestPointerLock(); });
+// 마우스를 화면에 가두는 포인터 락이 안 되는 환경(일부 내장 브라우저, iframe으로 넣은 페이지 등)에서는
+// 커서가 보이는 "커서 모드"로 자동 전환해 게임이 일시정지 화면에 멈추지 않게 한다.
+let lockless=false, mouseX=-1;
+function setPaused(p){
+  paused=p;
+  if(p){ firing=false; adsActive=false; }
+  el('lockmsg').classList.toggle('hide', !p);
+  el('quitBtn').classList.toggle('hide', !p || !running);
+}
+function controlling(){ return document.pointerLockElement===cv || (lockless && running && !paused); }
+function enterLockless(){ if(!running || document.pointerLockElement===cv) return; lockless=true; setPaused(false); }
+cv.addEventListener('click',()=>{
+  if(!running || controlling()) return;
+  if(lockless || !cv.requestPointerLock){ enterLockless(); return; }
+  let req;
+  try{ req=cv.requestPointerLock(); }catch(err){ enterLockless(); return; }
+  if(req && req.catch) req.catch(()=>enterLockless());
+  // 거절 신호 없이 조용히 무시되는 환경 대비: 잠시 뒤에도 잠기지 않았으면 커서 모드
+  setTimeout(()=>{ if(running && paused && document.pointerLockElement!==cv) enterLockless(); },400);
+});
+document.addEventListener('pointerlockerror',()=>enterLockless());
 document.addEventListener('pointerlockchange',()=>{
   const locked = document.pointerLockElement===cv;
-  paused = !locked;
-  if(!locked){ firing=false; adsActive=false; }
-  el('lockmsg').classList.toggle('hide', locked);
-  el('quitBtn').classList.toggle('hide', locked || !running);
+  if(locked){ lockless=false; setPaused(false); }
+  else if(!lockless) setPaused(true);
 });
+document.documentElement.addEventListener('mouseleave',()=>{ mouseX=-1; }); // 창 밖으로 나가면 회전 멈춤
 document.addEventListener('mousemove',e=>{
-  if(document.pointerLockElement===cv) player.ang += e.movementX*0.0024;
+  mouseX=e.clientX;
+  if(controlling()) player.ang += e.movementX*0.0024;
 });
 document.addEventListener('mousedown',e=>{
-  if(document.pointerLockElement!==cv) return;
+  if(!controlling()) return;
   if(e.button===0){ firing=true; attack(); }
   if(e.button===2 && hero && hero.weapon==='sniper') adsActive=true;
 });
@@ -379,6 +401,11 @@ function updatePlayer(dt){
   // 키보드 회전 (마우스 못쓸 때)
   if(keys['ArrowLeft']) player.ang-=0.045*dt*0.06;
   if(keys['ArrowRight']) player.ang+=0.045*dt*0.06;
+  // 커서 모드: 커서를 화면 왼쪽/오른쪽 끝에 두면 그쪽으로 계속 회전
+  if(lockless && mouseX>=0){
+    if(mouseX < W*0.06) player.ang-=0.035*dt*0.06;
+    else if(mouseX > W*0.94) player.ang+=0.035*dt*0.06;
+  }
 }
 
 // =========================================================
