@@ -36,6 +36,11 @@
 - **해머 "SENTINEL MAUL"** (Titan) — 가시 달린 강철 머리에 파랗게 빛나는 에너지 셀 4개. 머리 위에서 수직으로 내리치기 + 모션 블러 호. 방벽 스킬은 파란 육각형 보호막으로 표시됩니다.
 - **카타나 "RISING DRAGON"** (Kage) — 하늘색 발광선이 있는 칼날과 검정·금색 쓰바, 화면을 가로질러 겨눈 자세. 3단계 사무라이 베기 (겨눔 자세 → 上段 → 袈裟斬り) + 하늘색 베기 궤적.
 
+### 사격 연출
+- 쏠 때마다: 좌우로 살짝 흔들리는 반동, 탄피 배출구의 노리쇠 왕복, 튀어나가는 탄피, 총구 연기, 조준점까지 순간적으로 보이는 총알 빛줄기, 맞은 곳의 불꽃·먼지, 맞은 적이 하얗게 번쩍이며 살짝 밀려남. 처치한 적은 쓰러지며 사라짐.
+- 재장전: 총을 기울이고 빈 탄창이 빠진 뒤 새 탄창을 끼우고 장전 손잡이를 당김. 저격총은 쏠 때마다 오른손으로 노리쇠를 조작.
+- 미사일 스킬: 포드가 뒤로 튀며 번쩍이고, 떠 있는 홀로그램이 READY → LAUNCH → 충전 %로 바뀜.
+
 ### 충돌 판정
 - AABB 방식 벽 미끄러짐: X축과 Y축을 따로 검사해서, 벽에 막혀 딱 멈추지 않고 벽을 따라 미끄러지듯 움직입니다.
 - 적의 시야 확인과 스프라이트 가림 판정에 레이캐스팅을 씁니다.
@@ -61,7 +66,7 @@ Canvas의 `evenodd` 채우기 규칙으로 그립니다 — 화면 전체 사각
 | 입력 | 동작 |
 |---|---|
 | `W A S D` | 이동 |
-| 마우스 이동 | 시점 회전. 게임 화면을 클릭하면 마우스가 화면에 고정됨. 브라우저가 고정을 허용하지 않으면(일부 내장·임베드 브라우저) 커서 모드로 자동 전환 — 커서를 움직여 시점 회전, 화면 왼쪽/오른쪽 끝에 두면 계속 회전 |
+| 마우스 이동 | 시점 회전. 게임 화면을 클릭하면 마우스가 화면에 고정됨. 브라우저가 고정을 허용하지 않으면(일부 내장·임베드 브라우저) 커서 모드로 자동 전환 — 커서를 움직여 시점 회전 (방향키 ←→로도 회전) |
 | `← →` | 카메라 회전 (마우스를 쓸 수 없을 때) |
 | 좌클릭 | 공격 / 발사 |
 | 우클릭 | 스코프 조준 *(Medica 전용)* |
@@ -101,13 +106,13 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,440 lines, single file)
+├── game.js           # Complete game engine (~1,660 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
-- `game.js` — 게임 엔진 전체 (약 1,440줄, 파일 하나)
+- `game.js` — 게임 엔진 전체 (약 1,660줄, 파일 하나)
 - `GAME_GUIDE.md` — 전체 기능과 플레이 설명서 (한국어)
 
 ### `game.js` 한눈에 보기
@@ -304,12 +309,13 @@ function applyMelee() {
 **위치:** `loop()` 감소 · `attack()`과 `applyMelee()` 발생 · `render()` 적용
 
 ```js
-// Trigger (attack)
-recoilAmt = 1;
+// Trigger (attack) — recoil stacks a little in full-auto, with a small random sideways jitter
+recoilAmt = Math.min(1.6, recoilAmt + (sniper ? 1.4 : 0.55));
+recoilJit = (Math.random() - 0.5) * (sniper ? 0.04 : 0.10);
 shake = Math.max(shake, hero.weapon === 'sniper' ? 7 : 4);
 
-// Decay every frame (loop)
-recoilAmt = Math.max(0, recoilAmt - dt / 200);
+// Decay every frame (loop) — bigger recoil returns faster
+recoilAmt = Math.max(0, recoilAmt - dt * (0.0035 + recoilAmt * 0.006));
 shake     = Math.max(0, shake     - dt / 26);
 
 // Apply (render) — translate before drawing the world
@@ -321,16 +327,16 @@ ctx.translate(sx, sy);
 ctx.restore();
 
 // Weapon recoil (drawRifle)
-ctx.rotate(0.30 + recoilAmt * 0.07);          // muzzle kicks up
+ctx.rotate(0.30 + recoilAmt * 0.10 + recoilJit * recoilAmt);  // muzzle kicks up (+ jitter)
 ctx.scale(s, s);
-ctx.translate(recoilAmt * 26, recoilAmt * 4); // gun slides back toward the shoulder
+ctx.translate(recoilAmt * 34, recoilAmt * 5);                 // gun slides back toward the shoulder
 ```
 
 **이 방식을 쓴 이유:**
 - `shake`는 **월드 화면에만** 무작위 픽셀 이동을 줍니다(`ctx.save/restore`로 감쌈). 그래서 HUD와 무기 모델은 흔들리지 않고 항상 잘 보입니다.
-- 선형 감소(`값 - dt/상수`)는 스프링 물리보다 단순하면서 원하는 느낌을 줍니다. 처음에 날카롭게 튀고 금방 가라앉습니다. `dt`를 써서 감소 속도도 프레임 속도와 무관합니다.
+- 선형 감소(`값 - dt/상수`)는 스프링 물리보다 단순하면서 원하는 느낌을 줍니다. 처음에 날카롭게 튀고 금방 가라앉습니다. `dt`를 써서 감소 속도도 프레임 속도와 무관합니다. 반동(`recoilAmt`)은 클수록 더 빨리 돌아오게 해서, 저격총의 큰 반동은 빨리 회복되고 연사의 작은 반동은 조금씩 쌓입니다.
 - `Math.max(shake, newValue)`를 쓰므로 연속으로 맞아도 매번 초기화되지 않고 쌓입니다. 빠르게 연사하면 한 발마다 0으로 돌아가지 않고 흔들림이 이어집니다.
-- 반동은 총을 총열 방향을 따라 **어깨 쪽으로** 밀고 총구를 위로 들어 올립니다 — 실제 총기가 움직이는 방식과 같습니다. 휘두르기 애니메이션에 쓰는 `_easeIn`/`_easeOut`은 여기서는 필요 없습니다. 선형 감소만으로 충분히 맞는 느낌이 나기 때문입니다.
+- 반동은 총을 총열 방향을 따라 **어깨 쪽으로** 밀고 총구를 위로 들어 올립니다 — 실제 총기가 움직이는 방식과 같습니다. 휘두르기 애니메이션에 쓰는 `_easeIn`/`_easeOut`은 여기서는 필요 없습니다. 시간에 따른 감소만으로 충분히 맞는 느낌이 나기 때문입니다.
 
 ---
 

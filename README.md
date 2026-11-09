@@ -36,6 +36,11 @@ Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, an
 - **Hammer "SENTINEL MAUL"** (Titan) — spiked steel head with four glowing blue energy cells. Overhead vertical slam with motion-blur arc; the Barrier skill is drawn as a blue hexagon shield.
 - **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba, held across the screen. Three-phase samurai swing (guard pose → 上段 → 袈裟斬り) with a cyan slash trail.
 
+### Firing Feedback
+- Every shot: recoil kick with a little sideways jitter, the bolt cycles in the ejection port, a shell casing flies out, muzzle smoke, a brief bullet tracer to the crosshair, sparks or dust where it lands, and the hit enemy flashes white and is pushed back a little. Killed enemies tip over and fade out.
+- Reload: the gun tilts, the empty magazine drops, a new one goes in, then the charging handle is pulled. The sniper's right hand works the bolt after every shot.
+- Missile skill: the pod kicks back and flashes, and the floating hologram switches READY → LAUNCH → charge %.
+
 ### Collision Detection
 - AABB-style wall sliding: X and Y axes tested independently so the player glides along walls instead of stopping dead.
 - Enemy raycasting for line-of-sight checks and sprite occlusion.
@@ -61,7 +66,7 @@ Rendered with the Canvas `evenodd` fill rule — a full-screen rectangle with a 
 | Input | Action |
 |---|---|
 | `W A S D` | Move |
-| Mouse move | Look. Clicking the game locks the mouse to the screen; if the browser cannot lock it (some built-in or embedded browsers), the game switches to cursor mode — move the cursor to look, hold it at the left/right edge to keep turning |
+| Mouse move | Look. Clicking the game locks the mouse to the screen; if the browser cannot lock it (some built-in or embedded browsers), the game switches to cursor mode — move the cursor to look (the arrow keys also turn) |
 | `← →` | Turn the camera (when the mouse can't be used) |
 | Left click | Attack / Fire |
 | Right click | ADS scope aim *(Medica only)* |
@@ -99,7 +104,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,440 lines, single file)
+├── game.js           # Complete game engine (~1,660 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
@@ -297,12 +302,13 @@ function applyMelee() {
 **Where:** `loop()` decay · `attack()` and `applyMelee()` trigger · `render()` apply
 
 ```js
-// Trigger (attack)
-recoilAmt = 1;
+// Trigger (attack) — recoil stacks a little in full-auto, with a small random sideways jitter
+recoilAmt = Math.min(1.6, recoilAmt + (sniper ? 1.4 : 0.55));
+recoilJit = (Math.random() - 0.5) * (sniper ? 0.04 : 0.10);
 shake = Math.max(shake, hero.weapon === 'sniper' ? 7 : 4);
 
-// Decay every frame (loop)
-recoilAmt = Math.max(0, recoilAmt - dt / 200);
+// Decay every frame (loop) — bigger recoil returns faster
+recoilAmt = Math.max(0, recoilAmt - dt * (0.0035 + recoilAmt * 0.006));
 shake     = Math.max(0, shake     - dt / 26);
 
 // Apply (render) — translate before drawing the world
@@ -314,16 +320,16 @@ ctx.translate(sx, sy);
 ctx.restore();
 
 // Weapon recoil (drawRifle)
-ctx.rotate(0.30 + recoilAmt * 0.07);          // muzzle kicks up
+ctx.rotate(0.30 + recoilAmt * 0.10 + recoilJit * recoilAmt);  // muzzle kicks up (+ jitter)
 ctx.scale(s, s);
-ctx.translate(recoilAmt * 26, recoilAmt * 4); // gun slides back toward the shoulder
+ctx.translate(recoilAmt * 34, recoilAmt * 5);                 // gun slides back toward the shoulder
 ```
 
 **Why this approach:**
 - `shake` drives random pixel offsets applied to the **world layer only** (`ctx.save/restore` wrap), so the HUD and weapon model are unaffected and always readable.
-- Linear decay (`value - dt/constant`) is simpler than spring physics and produces the right feel: a sharp initial jolt that quickly settles. `dt` keeps the decay frame-rate-independent.
+- Linear decay (`value - dt/constant`) is simpler than spring physics and produces the right feel: a sharp initial jolt that quickly settles. `dt` keeps the decay frame-rate-independent. Recoil (`recoilAmt`) decays faster the bigger it is, so the heavy sniper kick snaps back quickly while light full-auto recoil builds up a little.
 - `Math.max(shake, newValue)` means overlapping hits accumulate without a hard reset, so rapid gunfire produces sustained shake rather than resetting to 0 between each shot.
-- Recoil slides the gun **back toward the shoulder** (along the barrel) and tips the muzzle up, matching how real firearms behave. The `_easeIn`/`_easeOut` helpers used in swing animations are not needed here because linear decay already gives the right feel.
+- Recoil slides the gun **back toward the shoulder** (along the barrel) and tips the muzzle up, matching how real firearms behave. The `_easeIn`/`_easeOut` helpers used in swing animations are not needed here because the time-based decay already gives the right feel.
 
 ---
 
