@@ -203,7 +203,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden){ releaseA
 document.addEventListener('mousedown',e=>{
   if(!controlling()) return;
   if(e.button===0){ firing=true; attack(); }
-  if(e.button===2 && hero && hero.weapon==='sniper') adsActive=true;
+  if(e.button===2 && hero && (hero.weapon==='sniper' || hero.weapon==='rifle')) adsActive=true;   // 오른쪽 클릭: 조준경으로 겨눔
 });
 document.addEventListener('mouseup',e=>{
   if(e.button===0) firing=false;
@@ -825,6 +825,19 @@ function drawArm(ax,ay, hx,hy, w, sleeve='#2a3142', band){
   ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx+(hx-mx)*0.4,my+(hy-my)*0.4); ctx.stroke();
   ctx.restore();
 }
+// 장갑 낀 손: 손바닥 + 손가락 4개(손잡이·포드를 감쌈) + 손목 띠 + 소매 커프. rot: 소매가 향하는 방향(손가락은 반대쪽)
+function drawGlove(x,y,r,rot,base='#24272d',finger='#2e323a',accent='#3a8be0',cuff='#1a1c21'){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
+  ctx.fillStyle=cuff; roundRect(r*0.6,-r*0.8,r*1.0,r*1.6,r*0.25); ctx.fill();                 // 소매 커프
+  ctx.fillStyle=accent; roundRect(r*0.48,-r*0.74,r*0.2,r*1.48,r*0.08); ctx.fill();             // 손목 띠
+  ctx.fillStyle=base; roundRect(-r*0.75,-r*0.72,r*1.3,r*1.44,r*0.45); ctx.fill();             // 손등
+  for(let i=0;i<4;i++){                                                                       // 손가락
+    ctx.fillStyle=finger; roundRect(-r*1.25,-r*0.66+i*r*0.34,r*0.85,r*0.3,r*0.15); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.10)'; ctx.fillRect(-r*0.62,-r*0.6+i*r*0.34,r*0.14,r*0.18); // 마디
+  }
+  ctx.fillStyle='rgba(255,255,255,0.08)'; roundRect(-r*0.5,-r*0.62,r*0.9,r*0.3,r*0.12); ctx.fill(); // 손등 하이라이트
+  ctx.restore();
+}
 function drawHand(hx,hy,r, glove='#11151f', top='#1c2333', ring){
   ctx.fillStyle=glove; ctx.beginPath(); ctx.arc(hx,hy,r,0,7); ctx.fill();
   ctx.fillStyle=top; ctx.beginPath(); ctx.arc(hx-r*0.2,hy-r*0.2,r*0.6,0,7); ctx.fill();
@@ -865,21 +878,21 @@ function drawRifleSide(now){
   const charge=abilCharge(now);
   const mt=now-muzzle, lt=now-missileFireT;
   const R=reloadAnim(now);
-  // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
-  const P=gunPose([335,-135,-0.22],[150,-215,0.04]);
+  // 평소 자세: 두 손으로 총을 수평으로 들어 화면 아래쪽을 가로지름 (쏘면 가운데 조준으로 넘어감)
+  const P=gunPose([40,-H*0.30/s,0.02],[30,-H*0.36/s,0.0]);
   ctx.save();
   ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
   ctx.rotate(P.r + k*0.10 + recoilJit*k - R.tilt*0.20);
-  ctx.scale(s*(1+0.15*P.A),s*(1+0.15*P.A));   // 견착하면 총이 얼굴 가까이 와서 커 보임
+  ctx.scale(s*1.6,s*1.6);
   ctx.translate(k*34, k*5);
   // 화면 좌표 기록 (탄피·연기·총알 궤적이 여기서 나감)
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
   gunFx.muzzle=tp(-358,0); gunFx.eject=tp(96,-18); gunFx.pod=tp(-190,48);
   // 왼손: 평소엔 핸드가드 뒤쪽 아래, 재장전 중엔 탄창으로
-  const LHX=_lerp(-14,70,R.hand), LHY=_lerp(30,150+Math.min(R.magDy,90),R.hand);
+  const LHX=_lerp(-96,70,R.hand), LHY=_lerp(84,150+Math.min(R.magDy,90),R.hand);   // 왼손: 미사일 포드를 아래에서 쥠
   // 팔 (총 뒤쪽)
-  drawArm(-10,340,LHX,LHY,42);       // 받침 왼팔
-  drawArm(330,300,150,72,48);        // 견착 오른팔 → 손잡이
+  drawArm(-190,400,LHX+10,LHY+18,64,'#23262c','#3a8be0');   // 왼팔 (아래 왼쪽에서)
+  drawArm(340,400,166,100,68,'#23262c','#3a8be0');           // 오른팔 → 손잡이
 
   // 개머리판 (조절식) + 버퍼 튜브
   ctx.fillStyle='#24272d'; roundRect(136,-14,60,24,6); ctx.fill();
@@ -1000,8 +1013,8 @@ function drawRifleSide(now){
   ctx.lineTo(146,126); ctx.closePath(); ctx.fill();
   ctx.fillStyle='#0c0d10'; for(let i=0;i<7;i++) ctx.fillRect(140+i*2.6,52+i*10,22,2);
   // 손
-  drawHand(LHX,LHY,22);  // 받침 손 (재장전 중엔 탄창을 잡음)
-  drawHand(150,72,24);   // 방아쇠 손
+  drawGlove(LHX,LHY,34,2.0);     // 왼손 장갑 (포드를 감쌈, 재장전 중엔 탄창을 잡음)
+  drawGlove(156,86,36,0.85);     // 오른손 장갑 (손잡이를 감쌈)
   // 머즐 플래시 — 앞으로 길게 뻗는 불꽃 + 주변을 밝히는 빛
   if(mt<70){
     const f=1-mt/70, v=Math.floor(muzzle)%3;
@@ -1046,20 +1059,20 @@ function drawSniperSide(now){
   const RHX=_lerp(144,bx+4,handB), RHY=_lerp(66,by+2,handB);
   const LHX=_lerp(-120,52,R.hand), LHY=_lerp(22,120+Math.min(R.magDy,90),R.hand);
 
-  // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
-  const P=gunPose([335,-125,-0.20],[160,-205,0.03]);
+  // 평소 자세: 두 손으로 총을 수평으로 들어 화면 아래쪽을 가로지름 (쏘면 가운데 조준으로 넘어감)
+  const P=gunPose([80,-H*0.30/s,0.02],[60,-H*0.36/s,0.0]);
   ctx.save();
   ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
   ctx.rotate(P.r + k*0.08 + recoilJit*k - R.tilt*0.20);
-  ctx.scale(s*(1+0.15*P.A),s*(1+0.15*P.A));   // 견착하면 총이 얼굴 가까이 와서 커 보임
+  ctx.scale(s*1.45,s*1.45);
   ctx.translate(k*30, k*6);
   const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
   gunFx.muzzle=tp(-414,0); gunFx.eject=tp(112,-20); gunFx.pod=null;
   // 흰 장갑 팔 + 하늘색 발광선
-  drawArm(-60,340,LHX,LHY,40,'#d9e1ec',BL);
-  drawArm(330,300,RHX,RHY,46,'#d9e1ec',BL);
-  glowPath(CY,1.5,()=>{ ctx.moveTo(-58,300); ctx.lineTo(_lerp(-60,LHX,0.65),_lerp(340,LHY,0.65)); });
-  glowPath(CY,1.5,()=>{ ctx.moveTo(310,284); ctx.lineTo(_lerp(330,RHX,0.62),_lerp(300,RHY,0.62)); });
+  drawArm(-200,400,LHX+10,LHY+18,60,'#d9e1ec',BL);
+  drawArm(340,400,RHX+10,RHY+18,64,'#d9e1ec',BL);
+  glowPath(CY,1.5,()=>{ ctx.moveTo(-190,350); ctx.lineTo(_lerp(-200,LHX,0.65),_lerp(380,LHY,0.65)); });
+  glowPath(CY,1.5,()=>{ ctx.moveTo(316,352); ctx.lineTo(_lerp(330,RHX,0.62),_lerp(380,RHY,0.62)); });
 
   // 개머리판 (흰 쉘) + 하늘색 회복약 캡슐
   ctx.fillStyle=wgrad(-34,70); ctx.beginPath();
@@ -1161,8 +1174,8 @@ function drawSniperSide(now){
   ctx.lineTo(138,118); ctx.closePath(); ctx.fill();
   ctx.fillStyle=BL; ctx.beginPath(); ctx.moveTo(118,24); ctx.lineTo(128,24); ctx.lineTo(146,118); ctx.lineTo(138,118); ctx.closePath(); ctx.fill();
   // 흰 장갑 손 (금색 테두리)
-  drawHand(LHX,LHY,21,'#e9eef5','#c4cfdd',GOLD);
-  drawHand(RHX,RHY,23,'#e9eef5','#c4cfdd',GOLD);
+  drawGlove(LHX,LHY,32,2.0,'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
+  drawGlove(RHX,RHY,34,0.85,'#e9eef5','#d5dde8',GOLD,'#c4cfdd');
   // 머즐 플래시 (하늘색 회복탄) + 빛 번짐
   if(mt<160){
     const f=1-mt/160,r=18+Math.random()*10;
@@ -1857,7 +1870,7 @@ function loop(t){
     // 총 자세 전환: 쏘는 중·방금 쏜 뒤엔 견착(빠르게 올림), 아니면 로우 레디(천천히 내림)
     if(hero.fireMode!=='melee'){
       const nowP=performance.now(), hold=hero.weapon==='sniper'?1200:650;
-      let target=(firing || nowP-muzzle<hold || nowP-missileFireT<700) ? 1 : 0;
+      let target=(firing || adsActive || nowP-muzzle<hold || nowP-missileFireT<700) ? 1 : 0;
       if(reloading) target=Math.min(target,0.35);
       aimBlend += (target-aimBlend)*Math.min(1, target>aimBlend ? dt/70 : dt/170);
     }
