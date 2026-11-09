@@ -1,43 +1,41 @@
 // ═══════════════════════════════════════════════════════════════
-//  kage3d.js — 카게의 일본도와 두 손 3D 모델(GLB)을 그리는 작은 WebGL 표시기
+//  kage3d.js — 카게의 일본도와 두 팔 3D 모델(GLB)을 그리는 작은 WebGL 표시기
 //  · 외부 라이브러리 없음 (GLB 읽기 + 셰이더 직접 구현)
 //  · 모델: assets/models/kage_blade.glb (칼, Meshy AI로 직접 제작)
-//          assets/models/kage_hands.glb (두 손, Tripo로 직접 제작) — 둘 다 텍스처 1024px로 축소
-//  · 서버 없이 index.html을 바로 열면(file://) fetch가 막히므로
-//    같은 내용을 담은 *.glb.js(base64)를 대신 읽는다
-//  · WebGL2가 없거나 읽기에 실패하면 ready=false 그대로 → 게임은 기존 2D 칼을 그린다
+//          assets/models/kage_arms.glb  (칼을 두 손으로 쥔 두 팔, Meshy AI로 직접 제작 — 원래 들어 있던 칼은 잘라냄)
+//          둘 다 텍스처 1024px로 축소
+//  · 1인칭 원근: 팔과 칼이 한 몸으로, 화면 아래 밖의 어깨를 축으로 돌아 손과 칼이 호를 그림
+//  · 서버 없이 index.html을 바로 열면(file://) fetch가 막히므로 같은 내용을 담은 *.glb.js(base64)를 대신 읽는다
+//  · WebGL2가 없거나 칼을 못 읽으면 ready=false → 게임은 2D 칼, 팔만 못 읽으면 3D 칼 + 2D 손
 // ═══════════════════════════════════════════════════════════════
 const Kage3D = (() => {
   const BLADE_URL = 'assets/models/kage_blade.glb', BLADE_JS = 'assets/models/kage_blade.glb.js';
-  const HANDS_URL = 'assets/models/kage_hands.glb', HANDS_JS = 'assets/models/kage_hands.glb.js';
+  const ARMS_URL  = 'assets/models/kage_arms.glb',  ARMS_JS  = 'assets/models/kage_arms.glb.js';
 
-  // 손 모델(장갑 낀 손 하나, 주먹으로 자루를 쥔 자세)을 칼 자루에 맞추는 값 — 손 모델 좌표로 직접 측정
-  //  c: 주먹이 쥔 자루 축의 가운데, a: 자루 축(칼끝 쪽), q: 팔 보호대 끝(구멍) 가운데, qr: 그 구멍 반지름, scale: 크기 배율
-  //  (모델 속 자루 반지름 0.033 × 배율 1.25 ≈ 칼 자루 반지름 0.029 × GRIP_THICK 1.4 → 손가락이 자루에 딱 감김)
-  //  두 손: y = 칼 자루 위치(쓰바 면에서 폼멜 쪽으로 음수), mirror = 거울상(같은 손 모델을 한쪽은 그대로, 한쪽은 뒤집어 씀)
-  //  dir = 팔이 향할 화면 방향 [x 오른쪽, y 위쪽, z 보는 사람 쪽] — 칼을 어떻게 돌려도 팔은 늘 몸(화면 아래) 쪽으로
-  //        (손목이 돌아가는 것처럼, 자루를 축으로 손을 돌려 팔 방향을 이쪽에 가장 가깝게 맞춤)
-  const HAND_FIT = {
-    c: [0.1523, -0.0487, -0.0747], a: [-0.1917, 0.8808, 0.4330], q: [-0.016, -0.365, -0.473], qr: 0.12, scale: 1.25,
-    // 오른손(위, 쓰바 바로 아래): 모델 그대로 = 오른손 — 감싼 손가락 쪽이 보임
-    // 왼손(아래, 자루 끝): 거울상 = 왼손 — 손등(갑옷 판) 쪽이 보임
-    right: { y: -0.088, dir: [ 0.30, -1, -0.15], mirror: false },
-    left:  { y: -0.445, dir: [-0.10, -1, -0.15], mirror: true  },
-  };
-
-  // 모델 치수 (모델 좌표, 칼끝이 +Y). 직접 측정한 값
+  // 칼 모델 치수 (모델 좌표, 칼끝이 +Y). 직접 측정한 값
   const GUARD_Y = -0.58;   // 쓰바(코등이)의 자루 쪽 면 = 손 기준점
   const WRAP_Y0 = -0.66;   // 자루 감기 시작 (쓰바 쪽)
   const WRAP_Y1 = -0.86;   // 자루 감기 끝 (폼멜 쪽)
   const TIP_Y   =  0.9476; // 칼끝
   const BUTT_Y  = -0.9525; // 폼멜 끝
-  // 모델의 자루는 두 손이 들어가기엔 짧아서(칼날의 약 20%) 감기 부분만 늘린다 → 실제 일본도 비율(약 30%)
-  const WRAP_STRETCH = 2.15;
-  // 1인칭 화면에서 손이 너무 작아 보이지 않게 손을 1.25배로 키우고, 자루·폼멜도 그만큼 굵게 (손가락이 자루에 맞게)
-  const GRIP_THICK = 1.4;
+  // 모델의 자루는 두 주먹이 들어가기엔 짧아서 감기 부분만 늘림 → 팔 모델의 두 주먹(쓰바 아래 ~ 폼멜) 길이에 맞춤
+  const WRAP_STRETCH = 2.85;
+  // 자루·폼멜을 굵게 → 팔 모델 주먹 속 자루 굵기(반지름 약 0.035~0.04)에 맞춤
+  const GRIP_THICK = 1.55;
 
-  const st = { ready:false, handsReady:false, failed:false, gl:null, cv:null, prog:null,
-               blade:null, hands:null, u:{}, tipLen:0, wrap0:0, wrap1:0, buttLen:0 };
+  // 두 팔 모델 치수 (팔 모델 좌표: x 오른쪽, y 위, z 보는 사람(어깨) 쪽). 직접 측정한 값
+  //  c·axis: 두 주먹이 쥔 자루 축(칼끝 쪽 방향), guardT: 축 위 코등이 자리(여기에 칼 쓰바 면을 놓음)
+  //  gripT: 두 주먹 가운데, pivot: 어깨 사이(팔 끝) — 이 점을 축으로 돌림
+  //  swordScale: 칼 크기 배율, focal: 원근 초점 거리(화면 높이 720 기준 픽셀), twist: 칼을 자루 축으로 비튼 각도(칼면이 보이게)
+  //  gripD: 두 주먹이 눈에서 떨어진 거리 (1 = 화면 면, 작을수록 가까이·크게)
+  const RIG = {
+    c: [0.009, 0.612, -0.4285], axis: [0.0097, 0.9801, -0.1984],
+    guardT: -0.715, gripT: -1.0, pivot: [0, -0.9, 0.35],
+    swordScale: 0.8, focal: 500, twist: -0.75, gripD: 0.62,
+  };
+
+  const st = { ready:false, rigReady:false, failed:false, gl:null, cv:null, prog:null,
+               blade:null, arms:null, u:{}, tipLen:0, wrap0:0, wrap1:0, buttLen:0 };
 
   // ── GLB 읽기 ──────────────────────────────────────────────
   function parseGLB(buf){
@@ -71,15 +69,26 @@ const Kage3D = (() => {
   }
 
   // ── 셰이더 ────────────────────────────────────────────────
-  // 좌표: 화면 픽셀 공간 (x 오른쪽, y 아래, z 보는 사람 쪽). 정사영 → 2D 손과 위치가 정확히 맞는다
+  // 좌표: 화면 픽셀 공간 (x 오른쪽, y 아래, z 보는 사람 쪽)
+  // uF > 0 이면 1인칭 원근 카메라: 눈은 화면 가운데 uC 앞 z = uF 에 있음. 가까울수록 크게, 눈 뒤(가까운 면 앞)는 잘림
+  //  (깊이 d = 1 - z/uF : 1이면 화면 면, 0이면 눈. 동차 좌표로 내보내 GPU가 원근 보간·근평면 자르기를 함)
   const VS = `#version 300 es
 in vec3 aPos; in vec3 aNor; in vec2 aUv;
-uniform mat3 uM; uniform vec3 uT; uniform vec2 uRes;
+uniform mat3 uM; uniform vec3 uT; uniform vec2 uRes; uniform float uF; uniform vec2 uC;
 out vec3 vP; out vec3 vN; out vec2 vUv;
 void main(){
   vec3 p = uM*aPos + uT;
   vP = p; vN = uM*aNor; vUv = aUv;
-  gl_Position = vec4(p.x/uRes.x*2.0-1.0, 1.0-p.y/uRes.y*2.0, -p.z/4000.0, 1.0);
+  if (uF > 0.0){
+    float d = 1.0 - p.z/uF;                                   // 눈에서의 거리 (화면 면 = 1)
+    const float dn = 0.12, df = 8.0;                          // 가까운 면 / 먼 면
+    float k = 1.0/dn - 1.0/df;
+    vec2 c = vec2(uC.x/uRes.x*2.0-1.0, 1.0-uC.y/uRes.y*2.0);
+    vec2 r = vec2((p.x-uC.x)/uRes.x*2.0, -(p.y-uC.y)/uRes.y*2.0);
+    gl_Position = vec4(c*d + r, 2.0*(d/dn - 1.0)/k - d, d);
+  } else {
+    gl_Position = vec4(p.x/uRes.x*2.0-1.0, 1.0-p.y/uRes.y*2.0, -p.z/4000.0, 1.0);
+  }
 }`;
   // 금속 PBR(GGX) + 가짜 환경 반사 + 하늘색 발광선
   const FS = `#version 300 es
@@ -217,7 +226,7 @@ void main(){
       gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FS));
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-      for (const n of ['uM','uT','uRes','uBase','uMR','uNrm','uGlow','uGlint','uAlpha']) st.u[n] = gl.getUniformLocation(prog, n);
+      for (const n of ['uM','uT','uRes','uF','uC','uBase','uMR','uNrm','uGlow','uGlint','uAlpha']) st.u[n] = gl.getUniformLocation(prog, n);
       Object.assign(st, { gl, cv, prog });
 
       // 칼: 손 기준점(쓰바 자루쪽 면)을 원점으로 옮기고, 자루 감기 부분만 길게 늘린다
@@ -236,22 +245,31 @@ void main(){
       st.wrap1   = GUARD_Y - WRAP_Y1 + extra;
       st.buttLen = GUARD_Y - BUTT_Y + extra;
       st.ready = true;
-      cv.addEventListener('webglcontextlost', e => { e.preventDefault(); st.ready = false; st.handsReady = false; });
+      cv.addEventListener('webglcontextlost', e => { e.preventDefault(); st.ready = false; st.rigReady = false; });
 
-      // 손: 실패해도 칼은 그대로 쓰고 손만 2D로 그린다
+      // 두 팔(칼 쥔 자세): 실패해도 칼은 그대로 쓰고 손만 2D로 그린다
       try {
-        st.hands = await uploadModel(gl, prog, await fetchGLB(HANDS_URL, HANDS_JS, 'KAGE_HANDS_GLB_B64'));
-        st.handsReady = true;
-      } catch(e){ console.warn('[Kage3D] 3D 손을 불러오지 못해 2D 손을 씁니다:', e && e.message); }
+        st.arms = await uploadModel(gl, prog, await fetchGLB(ARMS_URL, ARMS_JS, 'KAGE_ARMS_GLB_B64'));
+        st.rigReady = true;
+      } catch(e){ console.warn('[Kage3D] 3D 팔을 불러오지 못해 2D 손을 씁니다:', e && e.message); }
     } catch(e){
       st.failed = true;
       console.warn('[Kage3D] 3D 칼을 불러오지 못해 2D 칼을 씁니다:', e && e.message);
     }
   }
 
-  // 3x3 행렬(열 3개)·벡터 계산
+  // ── 행렬·투영 도우미 ───────────────────────────────────────
   const mulMV = (A, v) => [A[0][0]*v[0]+A[1][0]*v[1]+A[2][0]*v[2], A[0][1]*v[0]+A[1][1]*v[1]+A[2][1]*v[2], A[0][2]*v[0]+A[1][2]*v[1]+A[2][2]*v[2]];
   const mulMM = (A, B) => B.map(col => mulMV(A, col));
+  const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  const norm = v => { const L = Math.hypot(v[0], v[1], v[2]) || 1; return v.map(x => x/L); };
+  // 화면 픽셀 공간의 점 p(z = 보는 사람 쪽) → 원근 투영된 화면 위치 (셰이더와 같은 식)
+  function project(p, F, C){
+    if (!F) return [p[0], p[1]];
+    const w = 1 - p[2]/F;
+    if (w < 0.12) return null;                                 // 눈 뒤 (잘림)
+    return [C[0] + (p[0]-C[0])/w, C[1] + (p[1]-C[1])/w];
+  }
 
   // 모델 하나를 화면 픽셀 공간 행렬(열 X,Y,Z)과 위치 T로 그린다
   function renderModel(m, cols, T, glow, glint){
@@ -264,18 +282,23 @@ void main(){
     gl.drawElements(gl.TRIANGLES, m.count, m.itype, 0);
   }
   // 모델 상자가 화면에서 차지하는 영역을 rect에 넓혀 넣는다
-  function grow(rect, m, cols, T){
+  function grow(rect, m, cols, T, F, C){
     for (const ax of [m.mn[0], m.mx[0]]) for (const ay of [m.mn[1], m.mx[1]]) for (const az of [m.mn[2], m.mx[2]]){
-      const x = T[0]+cols[0][0]*ax+cols[1][0]*ay+cols[2][0]*az, y = T[1]+cols[0][1]*ax+cols[1][1]*ay+cols[2][1]*az;
+      const p = [T[0]+cols[0][0]*ax+cols[1][0]*ay+cols[2][0]*az, T[1]+cols[0][1]*ax+cols[1][1]*ay+cols[2][1]*az, T[2]+cols[0][2]*ax+cols[1][2]*ay+cols[2][2]*az];
+      const q = project(p, F, C);
+      if (!q){ rect[0] = -1e9; rect[1] = -1e9; rect[2] = 1e9; rect[3] = 1e9; return; }   // 눈 가까이까지 오면 화면 전체
+      const [x, y] = q;
       rect[0] = Math.min(rect[0], x); rect[1] = Math.min(rect[1], y); rect[2] = Math.max(rect[2], x); rect[3] = Math.max(rect[3], y);
     }
   }
-  // 여러 모델을 한 번에 그려서(서로 깊이로 가려짐) 2D 화면에 옮겨 붙인다. 바뀐 영역만 지우고 옮김 (빠르게)
-  function renderAll(ctx, items){
+  // 여러 모델을 한 번에 그려서(서로 깊이로 가려짐) 2D 화면에 옮겨 붙인다. 차지한 영역만 지우고 옮김 (빠르게)
+  //  F: 원근 초점 거리(픽셀, 0이면 원근 없음), C: 원근 중심(화면 가운데)
+  function renderAll(ctx, items, F, C){
     const gl = st.gl, cv = st.cv, W = ctx.canvas.width, H = ctx.canvas.height;
     if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+    F = F || 0; C = C || [W/2, H/2];
     const r = [1e9,1e9,-1e9,-1e9];
-    for (const it of items) grow(r, it.m, it.cols, it.T);
+    for (const it of items) grow(r, it.m, it.cols, it.T, F, C);
     const x0 = Math.max(0, Math.floor(r[0])-4), y0 = Math.max(0, Math.floor(r[1])-4);
     const x1 = Math.min(W, Math.ceil(r[2])+4),  y1 = Math.min(H, Math.ceil(r[3])+4);
     if (x1 <= x0 || y1 <= y0) return;
@@ -284,6 +307,7 @@ void main(){
     gl.clearColor(0,0,0,0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.disable(gl.CULL_FACE);
     gl.useProgram(st.prog); gl.uniform2f(st.u.uRes, W, H); gl.uniform1f(st.u.uAlpha, 1);
+    gl.uniform1f(st.u.uF, F); gl.uniform2f(st.u.uC, C[0], C[1]);
     for (const it of items) renderModel(it.m, it.cols, it.T, it.glow, it.glint);
     gl.bindVertexArray(null); gl.disable(gl.SCISSOR_TEST);
     ctx.save(); ctx.setTransform(1,0,0,1,0,0);
@@ -291,87 +315,90 @@ void main(){
     ctx.restore();
   }
 
-  // 손 좌표 → 칼 좌표 회전 (scale 포함). 손의 (팔 방향, 자루 축, 둘의 외적)을 칼의 (D1, +Y, D3)로 보낸다
-  const handBasis = (() => {
-    let cache = null;
-    return () => {
-      if (cache) return cache;
-      const n = v => { const L = Math.hypot(v[0],v[1],v[2]); return v.map(x => x/L); };
-      const a = n(HAND_FIT.a), w = HAND_FIT.q.map((x,i) => x - HAND_FIT.c[i]);
-      const wa = w[0]*a[0]+w[1]*a[1]+w[2]*a[2];
-      const e1 = n(w.map((x,i) => x - wa*a[i]));
-      const e3 = [e1[1]*a[2]-e1[2]*a[1], e1[2]*a[0]-e1[0]*a[2], e1[0]*a[1]-e1[1]*a[0]];
-      return (cache = [e1, a, e3]);
-    };
-  })();
-  function handRot(h, sw){
-    const [e1, e2, e3] = handBasis();
-    // 원하는 팔 방향(화면)을 칼 좌표로 바꾸고 자루 축 성분을 뺀다 → 자루를 축으로 돈 방향 D1
-    const g = h.dir, gx = g[0]*sw.e[0]+g[1]*sw.e[1]+g[2]*sw.e[2], gz = g[0]*sw.f[0]+g[1]*sw.f[1]+g[2]*sw.f[2];
-    const gl = Math.hypot(gx, gz) || 1;
-    const D1 = [gx/gl, 0, gz/gl];                               // 칼 좌표: +X 날 쪽, +Z 보는 사람 쪽
-    const Y = [0, 1, 0];
-    let D3 = [D1[1]*Y[2]-D1[2]*Y[1], D1[2]*Y[0]-D1[0]*Y[2], D1[0]*Y[1]-D1[1]*Y[0]];
-    if (h.mirror) D3 = D3.map(x => -x);
-    const k = HAND_FIT.scale;
-    // 열 j = 손 좌표 단위벡터 j가 칼 좌표에서 가는 곳
-    return [0,1,2].map(j => [0,1,2].map(i => k*(D1[i]*e1[j] + Y[i]*e2[j] + D3[i]*e3[j])));
-  }
-
-  // 칼(+손) 그리기
-  //  ctx: 지금 변환이 걸린 2D 컨텍스트 (무기 위치·흔들림·크기 포함)
-  //  o.px,o.py : 손 기준점(쓰바 자루쪽 면) — ctx 좌표
-  //  o.dx,o.dy : 칼끝 방향 (ctx 화면 평면, 단위벡터)
-  //  o.lean    : 보이는 길이 비율(1=화면과 나란함, 작을수록 칼끝이 화면 안쪽으로 들어감)
-  //  o.roll    : 칼 축을 중심으로 한 비틀림(라디안). 0이면 날이 (dy,-dx) 쪽을 향함
-  //  o.unit    : 모델 1단위 = ctx 몇 픽셀
-  //  o.under(wrists): 3D를 그리기 직전에 부름 — 손을 3D로 그릴 때 두 팔 보호대 끝 {right,left: {end,dir,r}} (ctx 좌표)을 넘김
+  // 칼만 그리기 (3D 팔을 못 읽었을 때 — 손은 게임이 2D로 그림). 정사영
+  //  o.px,o.py : 손 기준점(쓰바 자루쪽 면) — ctx 좌표,  o.dx,o.dy : 칼끝 방향(ctx 화면 평면, 단위벡터)
+  //  o.lean : 보이는 길이 비율(1=화면과 나란함),  o.roll : 칼 축 비틀림,  o.unit : 모델 1단위 = ctx 몇 픽셀
   function draw(ctx, o){
     if (!st.ready) return null;
     const M = ctx.getTransform();
     const sc = Math.sqrt(Math.abs(M.a*M.d - M.b*M.c));
     const c = Math.max(0.2, Math.min(1, o.lean)), s = Math.sqrt(1 - c*c);
-    // 보기 공간(y 위쪽): 칼 축 u, 날 방향 e, 면 방향 f
+    // 보기 공간(y 위쪽): 칼 축 u, 날 방향 e(베는 방향), 면 방향 f
     const u = [o.dx*c, -o.dy*c, -s];
     const w0 = [o.dy, o.dx, 0];
-    const n0 = [u[1]*w0[2]-u[2]*w0[1], u[2]*w0[0]-u[0]*w0[2], u[0]*w0[1]-u[1]*w0[0]];
+    const n0 = cross(u, w0);
     const cr = Math.cos(o.roll), sr = Math.sin(o.roll);
     const e = [w0[0]*cr+n0[0]*sr, w0[1]*cr+n0[1]*sr, w0[2]*cr+n0[2]*sr];
-    const f = [u[1]*e[2]-u[2]*e[1], u[2]*e[0]-u[0]*e[2], u[0]*e[1]-u[1]*e[0]];   // u×e : 보는 사람 쪽 면
-    // 모델 축 → 화면 픽셀: 모델 -X가 날(edge — 칼날이 휘어진 바깥쪽, 더 얇은 쪽), +Y가 칼끝, +Z가 무늬 있는 면(자루 마름모·하바키 보석)
-    // 날(-X)을 e(베는 방향 = 앞장서는 쪽)로 보낸다 → 모델 +X는 -e. 회전만 쓰므로 거울상 없음
+    const f = cross(u, e);   // 보는 사람 쪽 면
+    // 모델 -X(날 — 칼날이 휘어진 바깥쪽, 더 얇은 쪽)를 e로, +Y(칼끝)를 u로, +Z(무늬 있는 면)를 f로. 회전만 씀
     const D = v => [ (M.a*v[0] - M.c*v[1])*o.unit, (M.b*v[0] - M.d*v[1])*o.unit, v[2]*sc*o.unit ];
-    const ex = e.map(x => -x);
-    const B = [D(ex), D(u), D(f)];
+    const B = [D(e.map(x => -x)), D(u), D(f)];
     const T = [M.a*o.px + M.c*o.py + M.e, M.b*o.px + M.d*o.py + M.f, 0];
-    const items = [{ m: st.blade, cols: B, T, glow: o.glow ?? 1, glint: o.glint ?? -9 }];
-    let wrists = {};
-    if (st.handsReady && o.hands !== false){
-      // 칼 좌표의 손 하나 = 칼 화면 행렬 B × (손 좌표 → 칼 좌표 회전 R) — 손이 칼과 한 몸처럼 같이 움직임
-      const inv = M.inverse();
-      const toCtx = (cols, Tp, p) => { const r = mulMV(cols, p); const x = Tp[0]+r[0], y = Tp[1]+r[1]; return [inv.a*x+inv.c*y+inv.e, inv.b*x+inv.d*y+inv.f]; };
-      for (const side of ['right','left']){
-        const h = HAND_FIT[side], R = handRot(h, { e: ex, f });
-        const Hc = mulMM(B, R);
-        const off = mulMV(R, HAND_FIT.c.map(x => -x)); off[1] += h.y;
-        const bo = mulMV(B, off), HT = [T[0]+bo[0], T[1]+bo[1], T[2]+bo[2]];
-        items.push({ m: st.hands, cols: Hc, T: HT, glow: 0.25, glint: -9 });
-        // 팔 보호대 끝: 위치·팔이 뻗는 방향·굵기 (ctx 좌표) — 그 뒤로 2D 소매를 이어 그림
-        const end = toCtx(Hc, HT, HAND_FIT.q), fist = toCtx(Hc, HT, HAND_FIT.c);
-        const L = Math.hypot(end[0]-fist[0], end[1]-fist[1]) || 1;
-        wrists[side] = { end, dir: [(end[0]-fist[0])/L, (end[1]-fist[1])/L], r: HAND_FIT.qr*HAND_FIT.scale*o.unit };
-      }
-    }
-    if (o.under) o.under(wrists);                     // 3D보다 뒤에 깔릴 2D 그림(소매)
-    renderAll(ctx, items);
-    return wrists;
+    renderAll(ctx, [{ m: st.blade, cols: B, T, glow: o.glow ?? 1, glint: o.glint ?? -9 }], 0);
+    return {};
+  }
+
+  // 회전 행렬(보기 공간, y 위쪽): roll(화면 안 돌림) · pitch(칼끝이 앞뒤로) · yaw(좌우로 돌림)
+  function poseRot(pitch, yaw, roll){
+    const cp = Math.cos(pitch), sp = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw), cr = Math.cos(roll), sr = Math.sin(roll);
+    const Rx = [[1,0,0],[0,cp,sp],[0,-sp,cp]];          // 열 3개. pitch>0: 칼끝(+y)이 보는 사람 쪽으로
+    const Ry = [[cy,0,-sy],[0,1,0],[sy,0,cy]];          // yaw>0: 앞(-z)이 왼쪽으로
+    const Rz = [[cr,sr,0],[-sr,cr,0],[0,0,1]];          // roll>0: 칼끝이 왼쪽으로 (반시계)
+    return mulMM(Rz, mulMM(Rx, Ry));
+  }
+
+  // 두 팔 + 칼 그리기 (1인칭 원근). 팔·칼이 한 몸 — 어깨(화면 아래 밖)를 축으로 돌아서 손과 칼이 호를 그리며 움직임
+  //  p.x,p.y : 두 주먹 가운데의 ctx 좌표(원근 전),  p.pitch/yaw/roll : 어깨를 축으로 한 회전(라디안),  p.scale : 모델 1단위 = 픽셀
+  //  p.twist : 손 안에서 칼을 자루 축으로 돌린 각도 — 날이 베는 방향을 향하게
+  //  돌려주는 값: 칼끝·칼 중간·주먹의 ctx 좌표 {tip, mid, grip} — 궤적·빛 효과용
+  function drawRig(ctx, p){
+    if (!st.ready || !st.rigReady) return null;
+    const M = ctx.getTransform(), W = ctx.canvas.width, H = ctx.canvas.height;
+    const sc = Math.sqrt(Math.abs(M.a*M.d - M.b*M.c));
+    const R = poseRot(p.pitch, p.yaw, p.roll);
+    const k = p.scale;
+    // 보기 공간 → 화면 픽셀 (y 뒤집기 + ctx 변환), 크기 k 포함
+    const D = v => [ (M.a*v[0] - M.c*v[1])*k, (M.b*v[0] - M.d*v[1])*k, v[2]*sc*k ];
+    const A = mulMM(R, [[1,0,0],[0,1,0],[0,0,1]]).map(D);     // 팔 모델 → 화면
+    const F = RIG.focal * Math.min(W, H) / 720, C = [W/2, H/2];
+    // p.x,p.y 는 두 주먹(가운데)의 위치. 주먹은 늘 눈에서 같은 거리(gripD)에 두고, 어깨(돌림 축)는 거꾸로 계산
+    //  → 손이 카메라로 달려들지 않고, 팔 끝(어깨 쪽)은 눈 옆·뒤에 있어 화면에 안 보임
+    const ax0 = norm(RIG.axis);
+    const gripM = RIG.c.map((x,i) => x + ax0[i]*RIG.gripT);
+    const rel = mulMV(A, gripM.map((x,i) => x - RIG.pivot[i]));
+    const G = [M.a*p.x + M.c*p.y + M.e, M.b*p.x + M.d*p.y + M.f];
+    const zg = F*(1 - RIG.gripD*(p.depth ?? 1));                // 주먹 깊이 (p.depth로 앞뒤로 조금 밀고 당김)
+    const T0 = [G[0]-rel[0], G[1]-rel[1], zg - rel[2]];
+    const at = q => { const d = mulMV(A, q.map((x,i) => x - RIG.pivot[i])); return [T0[0]+d[0], T0[1]+d[1], T0[2]+d[2]]; };
+    // 칼 → 팔 모델 좌표: 칼 +Y = 자루 축, 칼 -X(날) = 앞(팔 모델 -z를 축에 수직으로), 칼 쓰바 면 = 팔 모델의 코등이 자리
+    const ax = norm(RIG.axis);
+    const fw = norm((() => { const z = [0,0,-1], d = z[0]*ax[0]+z[1]*ax[1]+z[2]*ax[2]; return z.map((x,i) => x - d*ax[i]); })());
+    // twist: 칼을 자루 축으로 비틂 — 날이 정면만 향하면 뒤에서 칼등만 보여 가는 선이 되므로, 칼면이 보이게 조금 돌림
+    //  날 방향 = 앞·cos(tw) + 오른쪽·sin(tw)  (tw<0 이면 앞-왼쪽, tw>0 이면 앞-오른쪽) → 베는 방향 쪽으로 날을 돌림
+    const tw = p.twist ?? RIG.twist;
+    const kx0 = fw.map(x => -x), kz0 = cross(kx0, ax), ct = Math.cos(tw), stw = Math.sin(tw);
+    const kx = kx0.map((x,i) => x*ct + kz0[i]*stw), kz = kz0.map((x,i) => -kx0[i]*stw + x*ct);
+    const s = RIG.swordScale;
+    const Ks = [kx.map(x => x*s), ax.map(x => x*s), kz.map(x => x*s)];
+    const guard = RIG.c.map((x,i) => x + ax[i]*RIG.guardT);
+    const Bc = mulMM(A, Ks), BT = at(guard);
+    const items = [
+      { m: st.arms,  cols: A,  T: at([0,0,0]), glow: 0.35, glint: -9 },
+      { m: st.blade, cols: Bc, T: BT,          glow: p.glow ?? 1, glint: p.glint ?? -9 },
+    ];
+    renderAll(ctx, items, F, C);
+    // 칼끝·중간·주먹 위치 (원근 투영 후 → ctx 좌표)
+    const inv = M.inverse();
+    const toCtx = q => { const r = project(q, F, C) || [C[0], C[1]]; const x = r[0], y = r[1]; return [inv.a*x+inv.c*y+inv.e, inv.b*x+inv.d*y+inv.f]; };
+    const bladePt = t => { const d = mulMV(Bc, [0, t, 0]); return [BT[0]+d[0], BT[1]+d[1], BT[2]+d[2]]; };
+    return { tip: toCtx(bladePt(st.tipLen)), mid: toCtx(bladePt(st.tipLen*0.6)), grip: toCtx(at(gripM)) };
   }
 
   // 모델 하나를 아무 방향으로 보기 (모델 확인용)
-  function view(ctx, name, cols, T){ if (st.ready && st[name]) renderAll(ctx, [{ m: st[name], cols, T, glow: 1, glint: -9 }]); }
+  function view(ctx, name, cols, T){ if (st.ready && st[name]) renderAll(ctx, [{ m: st[name], cols, T, glow: 1, glint: -9 }], 0); }
 
-  return { load, draw, view, fit: HAND_FIT,
-           get ready(){ return st.ready; }, get handsReady(){ return st.handsReady; }, get failed(){ return st.failed; },
+  return { load, draw, drawRig, view, rig: RIG,
+           get ready(){ return st.ready; }, get rigReady(){ return !!st.rigReady; }, get failed(){ return st.failed; },
            get tipLen(){ return st.tipLen; }, get wrap0(){ return st.wrap0; },
            get wrap1(){ return st.wrap1; }, get buttLen(){ return st.buttLen; } };
 })();

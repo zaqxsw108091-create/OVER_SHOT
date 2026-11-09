@@ -1572,6 +1572,7 @@ function drawGripHand(hx,hy,ux,uy,ax,ay,r,base,finger,accent){
 // 3D 칼 모델은 게임 시작 때 미리 읽어 둔다 (실패하면 2D 칼)
 if(typeof Kage3D!=='undefined') Kage3D.load();
 function drawKatana(now){
+  if(typeof Kage3D!=='undefined' && Kage3D.rigReady){ drawKatanaRig(now); return; }   // 3D 두 팔 + 칼 (1인칭)
   const KATANA_MS=500;
   const handleL=124, BLADE=430;   // 자루·실제 날 길이
   const sc=weaponScale(); ctx.save(); ctx.scale(sc,sc);
@@ -1630,26 +1631,13 @@ function drawKatana(now){
   const wrist=(hx,hy,ax,ay,r)=>{ let nx=-dy, ny=dx; if((ax-hx)*nx+(ay-hy)*ny<0){ nx=-nx; ny=-ny; }
     return [hx+nx*r*0.8, hy+ny*r*0.8]; };
   const [lwx,lwy]=wrist(lhx,lhy,LAX,LAY,LR), [rwx,rwy]=wrist(rhx,rhy,RAX,RAY,RR);
-  const hands3D = use3D && Kage3D.handsReady;           // 3D 손 모델(장갑+팔 보호대)을 쓰면 2D 손·팔은 그리지 않음
-  if(!hands3D){
-    armTo(LAX,LAY,lwx,lwy,LR*1.25,'#15171c','#2a2e36');   // 왼팔 (검은 소매)
-    armTo(RAX,RAY,rwx,rwy,RR*1.3,'#1d3c6e','#2f63b0');    // 오른팔 (파란 갑옷 소매)
-  }
+  armTo(LAX,LAY,lwx,lwy,LR*1.25,'#15171c','#2a2e36');   // 왼팔 (검은 소매)
+  armTo(RAX,RAY,rwx,rwy,RR*1.3,'#1d3c6e','#2f63b0');    // 오른팔 (파란 갑옷 소매)
 
   if(use3D){
     // 베는 동안: 발광선이 강해지고, 날을 따라 섬광이 한 번 훑고 지나감
     const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.42)/0.22) : 0;
     Kage3D.draw(ctx,{ px, py, dx, dy, lean:K[3], roll:K[4], unit:U3,
-      // 3D 손일 때: 팔 보호대 끝에서 화면 밖까지 소매(어두운 남색 천)를 이어 그림 (3D 손보다 뒤)
-      under: hands3D ? (wr)=>{
-        for(const k of ['left','right']){
-          const a=wr[k]; if(!a) continue;
-          const sx=a.end[0]-a.dir[0]*a.r*0.5, sy=a.end[1]-a.dir[1]*a.r*0.5;   // 보호대 안쪽에서 시작 (틈이 안 보이게)
-          ctx.save(); ctx.lineCap='butt';
-          armTo(sx,sy,sx+a.dir[0]*900,sy+a.dir[1]*900,a.r*1.7,'#1a2233','#26324a');
-          ctx.restore();
-        }
-      } : null,
       glow: 1.0 + 0.12*Math.sin(now*0.004) + 1.1*cutGlow,
       glint: (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : -9 });
   } else {
@@ -1737,15 +1725,20 @@ function drawKatana(now){
   }   // 2D 칼 끝
 
   // 두 손 — 오른손 파란 장갑(금 테두리), 왼손 검은 반장갑(손가락 끝이 보임)
-  if(!hands3D){
-    drawGripHand(lhx,lhy,dx,dy,LAX,LAY,LR,'#1b1e25','#2b2f39','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
-    drawGripHand(rhx,rhy,dx,dy,RAX,RAY,RR,'#1d3c6e','#2f63b0','#c9a24a');   // 오른손: 쓰바 바로 아래를 감싸 쥠
-  }
+  drawGripHand(lhx,lhy,dx,dy,LAX,LAY,LR,'#1b1e25','#2b2f39','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
+  drawGripHand(rhx,rhy,dx,dy,RAX,RAY,RR,'#1d3c6e','#2f63b0','#c9a24a');   // 오른손: 쓰바 바로 아래를 감싸 쥠
 
-  // ── 베기 이펙트: 칼날이 실제로 지나간 자리를 따라가는 하늘색 궤적 ──
-  if(t>0.18 && t<0.56){
-    kTrail.push({ tx:tipX, ty:tipY, mx:px+dx*bladeL*0.6, my:py+dy*bladeL*0.6, t:now });
-  } else if(t<0) kTrail=[];
+  drawKatanaFx(now, t>0.18 && t<0.56, t<0, tipX, tipY, px+dx*bladeL*0.6, py+dy*bladeL*0.6, (t>0.38 && t<0.60) ? (t-0.38)/0.22 : -1);
+  ctx.restore();
+}
+
+// ── 베기 이펙트 (2D 칼·3D 칼 공용) ──────────────────────────
+//  cutting: 지금 베는 중이면 칼끝·칼 중간 위치를 기록 → 칼날이 실제로 지나간 자리를 따라 하늘색 궤적
+//  reset: 쉬는 중이면 궤적 지움,  impact: 0~1 이면 칼끝 임팩트 빛 (-1 이면 없음)
+function drawKatanaFx(now, cutting, reset, tipX, tipY, midX, midY, impact){
+  const CY='#3fe0ff';
+  if(cutting) kTrail.push({ tx:tipX, ty:tipY, mx:midX, my:midY, t:now });
+  else if(reset) kTrail=[];
   kTrail=kTrail.filter(p=>now-p.t<140);
   if(kTrail.length>1){
     ctx.save();
@@ -1758,17 +1751,59 @@ function drawKatana(now){
     glowPath(CY,3,()=>{ ctx.moveTo(kTrail[0].tx,kTrail[0].ty); for(const p of kTrail) ctx.lineTo(p.tx,p.ty); });
     ctx.restore();
   }
-  if(t>=0){
-    if(t>0.38 && t<0.60){
-      // 임팩트 빛 (칼끝)
-      const f=(t-0.38)/0.22;
-      ctx.save();
-      ctx.globalAlpha=(1-f)*0.82;
-      const ig=ctx.createRadialGradient(tipX,tipY,0,tipX,tipY,52*(1-f)+6);
-      ig.addColorStop(0,'rgba(230,255,255,0.95)'); ig.addColorStop(1,'rgba(63,224,255,0)');
-      ctx.fillStyle=ig; ctx.beginPath(); ctx.arc(tipX,tipY,52*(1-f)+6,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
+  if(impact>=0 && impact<1){
+    const f=impact;
+    ctx.save();
+    ctx.globalAlpha=(1-f)*0.82;
+    const ig=ctx.createRadialGradient(tipX,tipY,0,tipX,tipY,52*(1-f)+6);
+    ig.addColorStop(0,'rgba(230,255,255,0.95)'); ig.addColorStop(1,'rgba(63,224,255,0)');
+    ctx.fillStyle=ig; ctx.beginPath(); ctx.arc(tipX,tipY,52*(1-f)+6,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ── 3D 두 팔 + 일본도 (1인칭) ─────────────────────────────
+// 직접 만든 '두 손으로 칼을 쥔 팔' 모델의 자세를 그대로 쓰고, 칼만 원래 검(RISING DRAGON)으로 바꿔 끼움.
+// 팔과 칼은 한 몸이고 화면 아래 밖의 어깨를 축으로 돈다 → 손과 칼이 호를 그리며 움직이고 팔은 늘 몸 쪽에 붙어 있음.
+// 자세: [주먹 x, 주먹 y (ctx 좌표, 화면 아래 가운데가 0,0 — 화면 가운데는 대략 y=-360),
+//        pitch(+면 칼끝이 나를 향해 뒤로, -면 앞으로), yaw(+면 왼쪽으로 돌림), roll(+면 칼끝이 왼쪽으로),
+//        크기(모델 1단위 = 픽셀), 날 방향(손 안에서 칼을 돌린 각도: -면 날이 앞-왼쪽, +면 앞-오른쪽)]
+// 팔 모델은 뼈대가 없는 한 덩어리라 크게 돌리면 팔이 화면을 가림 → 회전은 손목 정도로만, 움직임은 주먹 이동으로 냄
+const KAGE_RIG = {
+  IDLE: [  90, -170, -0.30,  0.04,  0.15, 560, -0.75],   // 겨눔(中段): 원본 모델 자세 그대로 — 두 주먹으로 쥐고 칼끝이 조준점 쪽
+  UP:   [ 150, -280,  0.10,  0.05, -0.30, 560, -0.85],   // 들기: 오른쪽 어깨 위로 (왼팔이 앞을 가로지름)
+  CUT:  [-180,  -60, -0.30, -0.05,  1.00, 560, -0.60],   // 袈裟斬り: 왼쪽 아래로 사선 내리베기 — 칼이 왼쪽으로 눕고 날이 앞-왼쪽(베는 방향)
+  SWING_MS: 500,
+  IAI_A:[-180,  -60, -0.30, -0.05,  1.00, 560,  1.10],   // 거합 시작: 칼을 왼쪽 아래로 눕히며 날을 오른쪽 위로 돌림
+  IAI_B:[ 160, -290,  0.10,  0.05, -0.30, 560,  1.00],   // 거합: 왼쪽 아래 → 오른쪽 위로 빠르게 올려베기(逆袈裟)
+  IAI_MS: 420,
+};
+function drawKatanaRig(now){
+  const R=KAGE_RIG, sc=weaponScale();
+  ctx.save(); ctx.scale(sc,sc);
+  const mix=(A,B,u)=>A.map((v,i)=>_lerp(v,B[i],u));
+  const breath=Math.sin(now*0.0018);
+  let K=R.IDLE.slice(); K[1]+=breath*5; K[2]+=breath*0.015;
+  let t=-1, ti=-1;
+  if(swingT && now-swingT<R.SWING_MS){
+    t=(now-swingT)/R.SWING_MS;
+    if(t<0.20)      K=mix(R.IDLE,R.UP,_easeOut(t/0.20));          // 들어올리기
+    else if(t<0.52) K=mix(R.UP,R.CUT,_easeIn((t-0.20)/0.32));     // 사선 베기 (점점 빨라짐)
+    else            K=mix(R.CUT,R.IDLE,_smooth((t-0.52)/0.48));   // 겨눔으로 돌아옴
+  } else if(iaiFlash && now-iaiFlash<R.IAI_MS){
+    ti=(now-iaiFlash)/R.IAI_MS;
+    if(ti<0.22)      K=mix(R.IDLE,R.IAI_A,_easeOut(ti/0.22));      // 칼을 왼쪽 아래로 내리며 날을 위로 돌림
+    else if(ti<0.48) K=mix(R.IAI_A,R.IAI_B,_easeIn((ti-0.22)/0.26)); // 올려베기 (매우 빠르게)
+    else             K=mix(R.IAI_B,R.IDLE,_smooth((ti-0.48)/0.52));
+  }
+  const cutting = (t>0.18 && t<0.56) || (ti>0.22 && ti<0.52);
+  const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.42)/0.22) : ti>=0 ? Math.max(0, 1-Math.abs(ti-0.38)/0.2) : 0;
+  const glint = (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : (ti>0.22 && ti<0.6) ? _lerp(1.6, -1.4, (ti-0.22)/0.38) : -9;
+  const r = Kage3D.drawRig(ctx,{ x:K[0], y:K[1], pitch:K[2], yaw:K[3], roll:K[4], scale:K[5], twist:K[6],
+    glow: 1.0 + 0.12*Math.sin(now*0.004) + 1.1*cutGlow, glint });
+  if(r){
+    const impact = (t>0.38 && t<0.60) ? (t-0.38)/0.22 : (ti>0.40 && ti<0.62) ? (ti-0.40)/0.22 : -1;
+    drawKatanaFx(now, cutting, t<0 && ti<0, r.tip[0], r.tip[1], r.mid[0], r.mid[1], impact);
   }
   ctx.restore();
 }

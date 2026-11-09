@@ -34,7 +34,7 @@
 - **돌격소총 "RAZOR-FX"** (Spark) — 옆모습이 보이게 들고 있으며, 총열 아래 미사일 포드, 홀로그램 조준경, 주황 발광 라인이 있습니다. 탄창 창에 남은 탄이 표시되고, 미사일 스킬이 충전될수록 포드의 미사일 3발이 밀려 나옵니다(준비되면 "READY" 홀로그램 표시). 반동, 총구 화염.
 - **저격소총 "LUX-VALOR"** (Medica) — 흰·파랑 몸체에 회복약이 소용돌이치는 유리관, 빛나는 결정이 달린 금장 총구. 볼트액션 애니메이션, 조준(ADS) 스코프 화면 (우클릭).
 - **해머 "SENTINEL MAUL"** (Titan) — 가시 달린 강철 머리에 파랗게 빛나는 에너지 셀 4개. 머리 위에서 수직으로 내리치기 + 모션 블러 호. 방벽 스킬은 파란 육각형 보호막으로 표시됩니다.
-- **카타나 "RISING DRAGON"** (Kage) — 직접 Meshy AI로 만든 **진짜 3D 모델**(`assets/models/kage_blade.glb`)을 `kage3d.js`가 그림. 모델의 색·금속/거칠기·노멀 텍스처로 금속 질감을 내고, 하늘색 줄은 스스로 빛나며 벨 때 더 밝아지고, 휘두를 때 날을 따라 빛이 한 번 훑고 지나감. WebGL2를 쓸 수 없으면 직접 그린 2D 칼(하늘색 발광선 칼날, 검정·금색 쓰바)로 자동 전환. 두 손도 직접 Tripo로 만든 **3D 모델**(`assets/models/kage_hands.glb`, 갑옷 장갑): 오른손은 쓰바 바로 아래, 왼손은 자루 끝 쪽을 손가락으로 감싸 쥠(장갑 모델 하나를 오른손은 그대로 써서 감싼 손가락 쪽이 보이고, 왼손은 거울상으로 뒤집어 손등 쪽이 보임). 손은 칼과 한 몸처럼 같이 움직이고, 팔은 실제 손목처럼 늘 화면 아래(몸) 쪽으로 돌아가며, 팔 보호대 뒤로 어두운 소매가 화면 밖까지 이어짐. 손 모델만 못 읽으면 명암이 들어간 2D 장갑으로 그림. 평소엔 칼끝이 화면 가운데를 향한 겨눔 자세(날은 아래). 휘두를 때는 손과 칼이 함께 움직여(겨눔 → 上段 → 袈裟斬り) 칼날이 앞장서서 베고, 칼끝이 실제로 지나간 자리를 따라 하늘색 궤적이 남음.
+- **카타나 "RISING DRAGON"** (Kage) — 직접 Meshy AI로 만든 **진짜 3D 모델**(`assets/models/kage_blade.glb`)을 `kage3d.js`가 그림. 모델의 색·금속/거칠기·노멀 텍스처로 금속 질감을 내고, 하늘색 줄은 스스로 빛나며 벨 때 더 밝아지고, 휘두를 때 날을 따라 빛이 한 번 훑고 지나감. WebGL2를 쓸 수 없으면 직접 그린 2D 칼(하늘색 발광선 칼날, 검정·금색 쓰바)로 자동 전환. 칼을 쥔 두 팔도 직접 Meshy AI로 만든 **3D 모델**(`assets/models/kage_arms.glb`): 갑옷 두 팔이 두 주먹으로 자루를 쥔 모델 자세를 그대로 쓰고, 모델 속 칼은 잘라낸 뒤 원래 검(RISING DRAGON)을 주먹 사이에 끼움. 진짜 1인칭 원근(가까울수록 크게, 눈 뒤는 잘림)으로 그리며, 팔과 칼은 한 몸으로 어깨를 축으로 움직여 손과 칼날이 호를 그리고 팔 끝은 화면에 안 보임. 공격: 일반 = 오른쪽 어깨 위로 들었다가 왼쪽 아래로 사선 베기(袈裟斬り), 거합(E) = 왼쪽 아래로 내렸다가 오른쪽 위로 빠르게 올려베기(逆袈裟). 자세마다 날을 베는 방향으로 돌림. 팔 모델만 못 읽으면 3D 칼 + 명암 2D 장갑으로 그림. 평소엔 칼끝이 화면 가운데를 향한 겨눔 자세(날은 아래). 휘두를 때는 손과 칼이 함께 움직여(겨눔 → 上段 → 袈裟斬り) 칼날이 앞장서서 베고, 칼끝이 실제로 지나간 자리를 따라 하늘색 궤적이 남음.
 
 ### 사격 연출
 - 총 자세: 쏘지 않을 때 소총·저격총은 화면 오른쪽 아래에서 총구가 가운데 쪽을 비스듬히 향하는 1인칭 자세로 보입니다(장갑 낀 왼손이 핸드가드를 아래에서 받침, 총열 쪽은 원근감 있게 조금 짧게 그림). 쏘면 총이 **화면 가운데로 와서 뒤에서 조준경을 들여다보는 자세**(조준 사격)가 됩니다. 소총의 홀로그램 조준경 창과 저격총의 스코프 접안부가 정확히 조준점에 오고, 적을 겨누면 조준점이 빨갛게 바뀌며, 화면의 + 조준선은 숨겨집니다. 옆모습은 가운데로 들어오며 사라지고 가운데 조준 화면은 아래에서 올라옵니다(약 0.15초, smoothstep). 마지막 발사 후 약 0.65초가 지나면(또는 오른쪽 버튼을 떼면) 다시 들고 있는 자세로 돌아오며, 겨누는 동안은 흔들림이 줄어듭니다. 오른쪽 버튼을 누르고 있으면 쏘지 않아도 이 가운데 조준 화면이 됩니다.
@@ -107,23 +107,23 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~2,070 lines, single file)
-├── kage3d.js         # Kage 3D katana + hands renderer (WebGL2)
+├── game.js           # Complete game engine (~2,100 lines, single file)
+├── kage3d.js         # Kage 3D katana + arms renderer (WebGL2, first-person perspective)
 ├── assets/models/
 │   ├── kage_blade.glb     # Kage katana 3D model
 │   ├── kage_blade.glb.js  # Same model as base64 (for file://)
-│   ├── kage_hands.glb     # Kage gauntlet hand 3D model
-│   └── kage_hands.glb.js  # Same model as base64 (for file://)
+│   ├── kage_arms.glb      # Kage arms gripping the sword (model's own sword removed)
+│   └── kage_arms.glb.js   # Same model as base64 (for file://)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
-- `game.js` — 게임 엔진 전체 (약 2,070줄, 파일 하나)
-- `kage3d.js` — 카게의 3D 칼과 두 손을 그리는 작은 WebGL2 표시기 (GLB 읽기 + 금속 셰이더, 외부 라이브러리 없음)
+- `game.js` — 게임 엔진 전체 (약 2,100줄, 파일 하나)
+- `kage3d.js` — 카게의 3D 칼과 두 팔을 그리는 작은 WebGL2 표시기 (GLB 읽기 + 금속 셰이더 + 1인칭 원근, 외부 라이브러리 없음)
 - `assets/models/kage_blade.glb` — 카게 칼 3D 모델 (텍스처를 2048px에서 1024px로 줄임)
 - `assets/models/kage_blade.glb.js` — 같은 모델을 base64로 담은 파일. 서버 없이 `index.html`을 바로 열면(file://) 이것을 읽음
-- `assets/models/kage_hands.glb` — 카게 장갑 손 3D 모델 (한 손. 왼손은 거울상으로 씀) / `kage_hands.glb.js` — 같은 모델의 base64 판
+- `assets/models/kage_arms.glb` — 칼을 두 손으로 쥔 카게의 두 팔 3D 모델 (모델 속 칼은 잘라냄) / `kage_arms.glb.js` — 같은 모델의 base64 판
 - `GAME_GUIDE.md` — 전체 기능과 플레이 설명서 (한국어)
 
 ### `game.js` 한눈에 보기
@@ -707,7 +707,7 @@ function endGame() {
 ## 출처
 
 - 카게의 칼 3D 모델(`assets/models/kage_blade.glb`)은 저장소 작성자가 [Meshy AI](https://www.meshy.ai/) 무료 요금제로 직접 만들었고, Meshy의 무료 요금제 결과물 이용 조건에 따라 사용합니다. 웹용으로 텍스처를 2048px에서 1024px로 줄였습니다.
-- 카게의 손 3D 모델(`assets/models/kage_hands.glb`)은 저장소 작성자가 [Tripo](https://www.tripo3d.ai/)로 직접 만들었고, Tripo의 생성물 이용 조건에 따라 사용합니다. 만들어진 파일에 팔이 붙어 버린 덩어리와 반쯤 펴진 손이 섞여 있어서, 자루를 제대로 쥔 장갑 손 하나만 남기고(쓰지 않는 꼭짓점 삭제) 텍스처를 2048px에서 1024px로 줄였습니다.
+- 카게의 팔 3D 모델(`assets/models/kage_arms.glb`)은 저장소 작성자가 [Meshy AI](https://www.meshy.ai/) 무료 요금제로 직접 만들었고, Meshy의 무료 요금제 결과물 이용 조건에 따라 사용합니다. 팔과 한 덩어리로 붙어 있던 칼(날·코등이·자루 표면·폼멜)은 위치와 색으로 골라 잘라내고 원래 검을 주먹 사이에 끼웠으며, 텍스처를 2048px에서 1024px로 줄였습니다.
 
 ---
 

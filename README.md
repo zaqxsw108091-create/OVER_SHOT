@@ -34,7 +34,7 @@ Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, an
 - **Assault Rifle "RAZOR-FX"** (Spark) — shown side-on with an under-barrel missile pod, holographic sight and orange glow lines. The magazine window shows remaining ammo, and the pod's three missiles slide out as the missile skill recharges (a "READY" hologram appears when it is ready). Recoil kick, muzzle flash.
 - **Sniper Rifle "LUX-VALOR"** (Medica) — white/blue body with a glass tube of swirling heal fluid and a gold muzzle with a glowing crystal. Bolt-action animation, ADS scope overlay (right-click).
 - **Hammer "SENTINEL MAUL"** (Titan) — spiked steel head with four glowing blue energy cells. Overhead vertical slam with motion-blur arc; the Barrier skill is drawn as a blue hexagon shield.
-- **Katana "RISING DRAGON"** (Kage) — a **real 3D model** (`assets/models/kage_blade.glb`, made by the author with Meshy AI) drawn by `kage3d.js`: metal shading from the model's color / metal-roughness / normal textures, the cyan lines glow on their own and get brighter during a cut, and a flash of light runs along the blade as it swings. If WebGL2 is unavailable it falls back to the hand-drawn 2D katana (blade with a cyan glow line and a black-and-gold tsuba). Both hands are also a **3D model** (`assets/models/kage_hands.glb`, an armored gauntlet made by the author with Tripo): the right hand grips just below the tsuba and the left hand grips near the pommel (one gauntlet model: as-is for the right hand, showing the fingers wrapped around the grip; mirrored for the left hand, showing the back of the hand), fingers wrapped around the handle. The hands move with the sword as one piece, the forearms always turn toward the bottom of the screen (like real wrists), and dark sleeves continue from the arm guards off-screen. If only the hand model fails to load, shaded 2D gloves are drawn instead. Idle is a guard stance with the tip aimed at the screen centre (edge down). The swing moves the hands and the blade together (guard → 上段 → 袈裟斬り) so the edge leads the cut, with a cyan trail that follows the actual path of the tip.
+- **Katana "RISING DRAGON"** (Kage) — a **real 3D model** (`assets/models/kage_blade.glb`, made by the author with Meshy AI) drawn by `kage3d.js`: metal shading from the model's color / metal-roughness / normal textures, the cyan lines glow on their own and get brighter during a cut, and a flash of light runs along the blade as it swings. If WebGL2 is unavailable it falls back to the hand-drawn 2D katana (blade with a cyan glow line and a black-and-gold tsuba). Kage's two arms holding the sword are also a **3D model** (`assets/models/kage_arms.glb`, made by the author with Meshy AI): both armored arms grip the handle with two fists, exactly as in the model; the model's own sword was cut out and the original RISING DRAGON katana is fitted into the fists. It is drawn in true first-person perspective (closer = bigger, things behind the eye are clipped), and the arms and sword move as one body around the shoulders, so the hands and blade sweep in arcs while the arm ends stay out of view. Attacks: normal = raise over the right shoulder, then a diagonal cut down to the lower left (袈裟斬り); Iai (E) = drop to the lower left and a fast rising cut to the upper right (逆袈裟). The edge is turned toward the cutting direction in each pose. If only the arm model fails to load, the 3D katana is drawn with shaded 2D gloves. Idle is a guard stance with the tip aimed at the screen centre (edge down). The swing moves the hands and the blade together (guard → 上段 → 袈裟斬り) so the edge leads the cut, with a cyan trail that follows the actual path of the tip.
 
 ### Firing Feedback
 - Gun stance: when not shooting, the rifle and sniper are held in the lower right of the screen with the muzzle angled toward the center, like a classic first-person view model (the left gloved hand supports the handguard from below; the barrel side is drawn slightly foreshortened for depth). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot (or when the right button is released) the gun returns to the held pose. Holding the right mouse button also brings up this centered sight view without firing. Sway is reduced while aiming.
@@ -105,13 +105,13 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~2,070 lines, single file)
-├── kage3d.js         # Small WebGL2 renderer for Kage's 3D katana and hands (GLB loader + metal shader)
+├── game.js           # Complete game engine (~2,100 lines, single file)
+├── kage3d.js         # Small WebGL2 renderer for Kage's 3D katana and arms (GLB loader + metal shader + first-person perspective)
 ├── assets/models/
 │   ├── kage_blade.glb     # Kage's katana 3D model (textures resized to 1024px)
 │   ├── kage_blade.glb.js  # Same model as base64, used when index.html is opened without a server (file://)
-│   ├── kage_hands.glb     # Kage's gauntlet hand 3D model (one hand; mirrored for the left)
-│   └── kage_hands.glb.js  # Same model as base64 (for file://)
+│   ├── kage_arms.glb      # Kage's two arms gripping the sword (the model's own sword cut out)
+│   └── kage_arms.glb.js   # Same model as base64 (for file://)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
@@ -694,7 +694,7 @@ function endGame() {
 ## Credits
 
 - Kage's katana 3D model (`assets/models/kage_blade.glb`) was created by the author with [Meshy AI](https://www.meshy.ai/) on the free plan, and is used under Meshy's terms for free-plan assets. Its textures were resized from 2048px to 1024px for the web.
-- Kage's hand 3D model (`assets/models/kage_hands.glb`) was created by the author with [Tripo](https://www.tripo3d.ai/) and is used under Tripo's terms for generated assets. The generated file contained extra merged arms and a second, half-open hand, so only the cleanly gripping gauntlet was kept (unused vertices removed) and its textures were resized from 2048px to 1024px.
+- Kage's arms 3D model (`assets/models/kage_arms.glb`) was created by the author with [Meshy AI](https://www.meshy.ai/) on the free plan and is used under Meshy's terms for free-plan assets. The sword that came fused with the arms (blade, guard, handle surface, pommel) was cut out by position and color so the original katana could be fitted into the fists, and the textures were resized from 2048px to 1024px.
 
 ---
 
