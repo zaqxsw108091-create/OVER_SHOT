@@ -859,14 +859,14 @@ function weaponScale(){ return Math.max(0.75, Math.min(1.35, W/1280)); }
 // 자동소총 RAZOR-FX (딜러) — 오른쪽 아래에서 옆모습이 보이게 견착, 총구는 화면 중앙 쪽
 // 디자인: 건메탈 몸체 + 주황 발광 라인·케이블, 홀로그램 조준경, 총열 아래 미사일 포드(스킬)
 // 동작: 발사 반동(뒤로 밀림·총구 들림·좌우 흔들림), 노리쇠 왕복, 탄피 배출, 재장전(탄창 교체·장전), 미사일 발사
-function drawRifle(now){
-  const k=recoilAmt, s=weaponScale();
+function drawRifleSide(now){
+  const k=recoilAmt, s=weaponScale(), GA=ctx.globalAlpha;
   const OR='#ff8a2a', BLUE='#3aa8ff';
   const charge=abilCharge(now);
   const mt=now-muzzle, lt=now-missileFireT;
   const R=reloadAnim(now);
   // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
-  const P=gunPose([335,-135,-0.22],[230,-330,0.10]);
+  const P=gunPose([335,-135,-0.22],[150,-215,0.04]);
   ctx.save();
   ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
   ctx.rotate(P.r + k*0.10 + recoilJit*k - R.tilt*0.20);
@@ -940,7 +940,7 @@ function drawRifle(now){
   const bob=Math.sin(now*0.004)*3, glitch=(Math.sin(now*0.031)*Math.sin(now*0.017)>0.92)?0.45:1;
   const launching=lt<600;
   ctx.save(); ctx.translate(-8+(launching&&lt<150?(Math.random()-0.5)*4:0),-156+bob);
-  ctx.globalAlpha=glitch;
+  ctx.globalAlpha=GA*glitch;
   ctx.fillStyle=launching?'rgba(255,140,60,0.16)':'rgba(120,200,255,0.12)'; roundRect(0,0,84,36,5); ctx.fill();
   ctx.strokeStyle=launching?'rgba(255,170,90,0.8)':'rgba(150,215,255,0.65)'; ctx.lineWidth=1.2; roundRect(0,0,84,36,5); ctx.stroke();
   ctx.fillStyle='rgba(150,215,255,0.10)'; for(let y=3;y<36;y+=4) ctx.fillRect(2,y,80,1);   // 홀로그램 주사선
@@ -956,12 +956,12 @@ function drawRifle(now){
   ctx.save(); ctx.translate(podKick,0);
   for(let i=0;i<3;i++){
     const my=30+i*17, out=charge*20;
-    ctx.globalAlpha=0.35+0.65*charge;
+    ctx.globalAlpha=GA*(0.35+0.65*charge);
     ctx.fillStyle='#3a3f47'; roundRect(-168-out,my,90,13,4); ctx.fill();
     ctx.fillStyle=OR; ctx.beginPath(); ctx.moveTo(-166-out,my);
     ctx.quadraticCurveTo(-198-out,my+6.5,-166-out,my+13); ctx.closePath(); ctx.fill();
     ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillRect(-180-out,my+2,8,2);
-    ctx.globalAlpha=1;
+    ctx.globalAlpha=GA;
   }
   ctx.fillStyle='#1a1c20'; roundRect(-122,18,40,14,3); ctx.fill();            // 마운트
   const pg=ctx.createLinearGradient(0,24,0,92); pg.addColorStop(0,'#3f444d'); pg.addColorStop(1,'#16181c');
@@ -979,7 +979,7 @@ function drawRifle(now){
 
   // 탄창 (주황 잔탄 창) — 재장전 때 빠졌다가 새 탄창이 끼워짐
   if(R.magA>0){
-    ctx.save(); ctx.globalAlpha=R.magA; ctx.translate(46,40+R.magDy); ctx.rotate(0.18+R.magDy*0.002);
+    ctx.save(); ctx.globalAlpha=GA*R.magA; ctx.translate(46,40+R.magDy); ctx.rotate(0.18+R.magDy*0.002);
     const mg=ctx.createLinearGradient(0,0,46,0); mg.addColorStop(0,'#2e3239'); mg.addColorStop(1,'#15171b');
     ctx.fillStyle=mg; roundRect(0,0,46,104,7); ctx.fill();
     ctx.fillStyle='#08090b'; roundRect(30,10,9,70,3); ctx.fill();
@@ -1025,8 +1025,8 @@ function drawRifle(now){
 // 저격소총 LUX-VALOR (힐러) — 볼트액션, 오른쪽 아래에서 옆모습이 보이게 견착. 우클릭 ADS
 // 디자인: 흰·파랑 몸체, 하늘색 회복약이 흐르는 유리관, 금장 총구와 하늘색 결정
 // 동작: 큰 반동 → 오른손으로 노리쇠를 들어 당겼다 밀어 넣음(탄피 배출) → 다시 손잡이로, 재장전(탄창 교체)
-function drawSniper(now){
-  const k=recoilAmt, s=weaponScale(), mt=now-muzzle;
+function drawSniperSide(now){
+  const k=recoilAmt, s=weaponScale(), mt=now-muzzle, GA=ctx.globalAlpha;
   const CY='#4ff0ff', BL='#2f6fd6', GOLD='#d9b45a';
   const R=reloadAnim(now);
   const wgrad=(y0,y1)=>{ const g=ctx.createLinearGradient(0,y0,0,y1);
@@ -1047,7 +1047,7 @@ function drawSniper(now){
   const LHX=_lerp(-120,52,R.hand), LHY=_lerp(22,120+Math.min(R.magDy,90),R.hand);
 
   // 자세: 로우 레디 [x, y, 회전] ↔ 견착 조준
-  const P=gunPose([335,-125,-0.20],[245,-320,0.08]);
+  const P=gunPose([335,-125,-0.20],[160,-205,0.03]);
   ctx.save();
   ctx.translate(P.x*s,(P.y+R.tilt*40)*s);
   ctx.rotate(P.r + k*0.08 + recoilJit*k - R.tilt*0.20);
@@ -1144,7 +1144,7 @@ function drawSniper(now){
   ctx.fillStyle='#fff3c8'; ctx.beginPath(); ctx.arc(bx-2,by-2,3,0,7); ctx.fill();
   // 탄창 (회복탄 칸) — 재장전 때 빠졌다가 새 탄창이 끼워짐
   if(R.magA>0){
-    ctx.save(); ctx.globalAlpha=R.magA; ctx.translate(30,24+R.magDy); ctx.rotate(0.06+R.magDy*0.002);
+    ctx.save(); ctx.globalAlpha=GA*R.magA; ctx.translate(30,24+R.magDy); ctx.rotate(0.06+R.magDy*0.002);
     ctx.fillStyle=wgrad(0,80); roundRect(0,0,46,76,7); ctx.fill();
     ctx.fillStyle=BL; roundRect(0,66,46,12,4); ctx.fill();
     const shown = R.rp>=0.62 ? maxammo : ammo;
@@ -1181,6 +1181,232 @@ function drawSniper(now){
     ctx.fillStyle=`rgba(240,255,255,${f})`; ctx.beginPath(); ctx.arc(0,0,r*0.55,0,7); ctx.fill();
     ctx.restore();
   }
+  ctx.restore();
+}
+
+// ── 총 그리기 진입점: 평소엔 옆모습(로우 레디), 쏘면 총을 화면 가운데로 가져와 조준경을 들여다보는 자세 ──
+let aimOnTarget=false;
+function adsMix(){
+  const A=_smooth(Math.max(0,Math.min(1,aimBlend)));
+  return { A,
+    side: 1-_smooth(Math.max(0,Math.min(1,(A-0.35)/0.2))),     // 옆모습은 0.35~0.55 사이에 사라짐
+    ads:  _smooth(Math.max(0,Math.min(1,(A-0.40)/0.2))),        // 가운데 조준은 0.40~0.60 사이에 나타남
+    rise: Math.max(0,Math.min(1,(A-0.40)/0.60)) };              // 아래에서 올라오는 정도
+}
+function drawRifle(now){
+  const m=adsMix();
+  if(m.side>0.01){ ctx.save(); ctx.globalAlpha*=m.side; drawRifleSide(now); ctx.restore(); }
+  if(m.ads>0.01){ ctx.save(); ctx.globalAlpha*=m.ads; drawRifleADS(now,m.rise); ctx.restore(); }
+}
+function drawSniper(now){
+  const m=adsMix();
+  if(m.side>0.01){ ctx.save(); ctx.globalAlpha*=m.side; drawSniperSide(now); ctx.restore(); }
+  if(m.ads>0.01){ ctx.save(); ctx.globalAlpha*=m.ads; drawSniperADS(now,m.rise); ctx.restore(); }
+}
+// 떠 있는 홀로그램 표시창 (READY / LAUNCH / 충전 %)
+function drawHoloTag(x,y,now,charge,lt,OR){
+  const GA=ctx.globalAlpha, bob=Math.sin(now*0.004)*3;
+  const glitch=(Math.sin(now*0.031)*Math.sin(now*0.017)>0.92)?0.45:1, launching=lt<600;
+  ctx.save(); ctx.translate(x,y+bob); ctx.globalAlpha=GA*glitch;
+  ctx.fillStyle=launching?'rgba(255,140,60,0.16)':'rgba(120,200,255,0.12)'; roundRect(0,0,84,34,5); ctx.fill();
+  ctx.strokeStyle=launching?'rgba(255,170,90,0.8)':'rgba(150,215,255,0.65)'; ctx.lineWidth=1.2; roundRect(0,0,84,34,5); ctx.stroke();
+  ctx.fillStyle='rgba(150,215,255,0.10)'; for(let yy=3;yy<34;yy+=4) ctx.fillRect(2,yy,80,1);
+  ctx.font='bold 14px Orbitron,monospace'; ctx.textAlign='center';
+  if(launching){ ctx.fillStyle=(Math.floor(lt/90)%2)?'#ffffff':OR; ctx.fillText('LAUNCH',42,22); }
+  else { ctx.fillStyle=charge>=1?OR:'rgba(150,215,255,0.9)'; ctx.fillText(charge>=1?'READY':Math.floor(charge*100)+'%',42,22); }
+  ctx.textAlign='left'; ctx.restore();
+}
+// 조준경 창이 뚫린 하우징 (창 안으로 바깥 세상이 보이도록 evenodd로 구멍)
+function sightHousing(ox,oy,ow,oh,ix,iy,iw,ih,col0,col1){
+  const g=ctx.createLinearGradient(0,oy,0,oy+oh); g.addColorStop(0,col0); g.addColorStop(1,col1);
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.moveTo(ox+14,oy); ctx.arcTo(ox+ow,oy,ox+ow,oy+oh,14); ctx.arcTo(ox+ow,oy+oh,ox,oy+oh,14);
+  ctx.arcTo(ox,oy+oh,ox,oy,14); ctx.arcTo(ox,oy,ox+ow,oy,14); ctx.closePath();
+  ctx.moveTo(ix+8,iy); ctx.arcTo(ix+iw,iy,ix+iw,iy+ih,8); ctx.arcTo(ix+iw,iy+ih,ix,iy+ih,8);
+  ctx.arcTo(ix,iy+ih,ix,iy,8); ctx.arcTo(ix,iy,ix+iw,iy,8); ctx.closePath();
+  ctx.fill('evenodd');
+}
+
+// 자동소총 RAZOR-FX — 가운데 조준: 뒤에서 홀로그램 조준경 창을 들여다봄. 창 안의 점이 조준점
+function drawRifleADS(now,u){
+  const s=weaponScale(), k=recoilAmt, OR='#ff8a2a', BLUE='#3aa8ff';
+  const charge=abilCharge(now), mt=now-muzzle, lt=now-missileFireT;
+  const rise=(1-_smooth(u))*H*0.6;
+  ctx.save();
+  ctx.translate(recoilJit*k*260, -H/2 + rise - k*26*s);   // (0,0) = 조준경 창 가운데 = 화면 조준점. 쏘면 위로 튀었다 돌아옴
+  ctx.rotate(recoilJit*k*0.6);
+  ctx.scale(s*1.15,s*1.15);
+  const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
+  gunFx.muzzle=tp(0,22); gunFx.eject=tp(60,110); gunFx.pod=tp(-75,69);
+
+  // 1) 총구 불꽃 — 조준경 뒤쪽에서 터져 하우징 둘레로 퍼짐
+  if(mt<70){
+    const f=1-mt/70, v=Math.floor(muzzle)%3;
+    const lg=ctx.createRadialGradient(0,20,0,0,20,240);
+    lg.addColorStop(0,`rgba(255,200,110,${0.55*f})`); lg.addColorStop(1,'rgba(255,140,40,0)');
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(0,20,240,0,7); ctx.fill();
+    ctx.save(); ctx.translate(0,20); ctx.rotate(v*0.4);
+    ctx.fillStyle=`rgba(255,185,80,${0.9*f})`; ctx.beginPath();
+    for(let i=0;i<12;i++){ const an=i/12*Math.PI*2, rr=(i%2?60:150)*(0.7+0.3*f); ctx[i?'lineTo':'moveTo'](Math.cos(an)*rr,Math.sin(an)*rr); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  // 2) 미사일 포드 (총열 아래) — 뒤쪽 발사 링이 충전될수록 밝아짐
+  const podKick=lt<260?(1-lt/260)*8:0;
+  ctx.save(); ctx.translate(0,podKick);
+  const pg=ctx.createLinearGradient(0,40,0,100); pg.addColorStop(0,'#3f444d'); pg.addColorStop(1,'#16181c');
+  ctx.fillStyle=pg; roundRect(-114,40,78,60,12); ctx.fill();
+  ctx.fillStyle='#14161a'; ctx.beginPath(); ctx.arc(-75,69,22,0,7); ctx.fill();
+  ctx.strokeStyle=rgba(OR,0.35+0.65*charge); ctx.lineWidth=4; ctx.beginPath(); ctx.arc(-75,69,15,0,7); ctx.stroke();
+  glowDot(-75,69,3+charge*2,OR,0.4+0.6*charge);
+  glowDot(-104,52,1.6,BLUE,0.9);
+  if(lt<160){ const f=1-lt/160; glowDot(-75,69,16*f+4,OR,f); }
+  ctx.restore();
+  // 3) 핸드가드 (조준경 아래로 보이는 앞부분)
+  const hg=ctx.createLinearGradient(-44,0,44,0); hg.addColorStop(0,'#17191d'); hg.addColorStop(0.5,'#3a3f47'); hg.addColorStop(1,'#17191d');
+  ctx.fillStyle=hg; ctx.beginPath(); ctx.moveTo(-30,44); ctx.lineTo(30,44); ctx.lineTo(44,100); ctx.lineTo(-44,100); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#08090b'; for(let i=0;i<2;i++){ roundRect(-34+i*4,54+i*22,8,13,4); ctx.fill(); roundRect(26-i*4,54+i*22,8,13,4); ctx.fill(); }
+  glowPath(OR,1.6,()=>{ ctx.moveTo(-40,98); ctx.lineTo(-29,48); });
+  // 4) 왼팔·왼손 — 핸드가드를 아래에서 받침
+  drawArm(-430,760,-52,92,64);
+  drawHand(-50,90,30);
+  // 5) 탄창 (주황 잔탄 창)
+  ctx.save(); ctx.translate(-70,176); ctx.rotate(0.14);
+  ctx.fillStyle=shade3(0,50,'#2e3239','#3a3f47','#15171b'); roundRect(0,0,50,190,8); ctx.fill();
+  ctx.fillStyle='#08090b'; roundRect(36,14,9,110,3); ctx.fill();
+  const lit=Math.ceil((maxammo?ammo/maxammo:0)*12);
+  for(let i=0;i<12;i++){ ctx.fillStyle=i<lit?OR:'#2a1a10'; ctx.fillRect(38,114-i*8.6,5,5.6); }
+  ctx.restore();
+  // 6) 조준경 받침 (레일 마운트)
+  ctx.fillStyle='#202328'; roundRect(-24,50,48,46,4); ctx.fill();
+  ctx.fillStyle='#0f1114'; for(let y=56;y<94;y+=8) ctx.fillRect(-24,y,48,3);
+  // 7) 리시버 뒷면 + 장전 손잡이 + 주황 발광선 + 탄피 배출구(노리쇠 왕복)
+  const rg=ctx.createLinearGradient(0,92,0,190); rg.addColorStop(0,'#41464f'); rg.addColorStop(1,'#1a1c20');
+  ctx.fillStyle=rg; roundRect(-60,92,120,98,10); ctx.fill();
+  ctx.fillStyle='#2b2f36'; roundRect(-38,86,76,12,4); ctx.fill();
+  ctx.fillStyle='#0b0c0e'; roundRect(48,104,14,36,3); ctx.fill();
+  ctx.fillStyle='#565b64'; roundRect(50,106+(mt<70?(1-mt/70)*10:0),10,16,2); ctx.fill();
+  glowPath(OR,2,()=>{ ctx.moveTo(-55,104); ctx.lineTo(-55,182); });
+  glowPath(OR,2,()=>{ ctx.moveTo(55,150); ctx.lineTo(55,182); });
+  ctx.fillStyle='rgba(205,212,222,0.7)'; ctx.font='bold 11px Orbitron,monospace'; ctx.textAlign='center';
+  ctx.fillText('RAZOR-FX',0,150); ctx.textAlign='left';
+  // 8) 개머리판 (뺨에 붙인 윗면이 화면 아래로 이어짐)
+  const sg=ctx.createLinearGradient(-120,0,140,0); sg.addColorStop(0,'#16181c'); sg.addColorStop(0.5,'#3a3f47'); sg.addColorStop(1,'#16181c');
+  ctx.fillStyle=sg; ctx.beginPath(); ctx.moveTo(-48,188); ctx.lineTo(48,188); ctx.lineTo(150,900); ctx.lineTo(-120,900); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(200,206,214,0.45)'; ctx.font='bold 12px Orbitron,monospace'; ctx.textAlign='center';
+  ctx.fillText('VOLTA R&D',8,280); ctx.textAlign='left';
+  // 9) 오른팔·손잡이·오른손 (방아쇠 손)
+  ctx.save(); ctx.translate(92,196); ctx.rotate(-0.25);
+  ctx.fillStyle='#17191d'; roundRect(-18,0,40,96,10); ctx.fill();
+  ctx.fillStyle='#0c0d10'; for(let i=0;i<6;i++) ctx.fillRect(-12,14+i*12,28,2);
+  ctx.restore();
+  drawArm(470,760,108,262,70);
+  drawHand(104,256,36);
+  // 10) 홀로그램 조준경 하우징 (창은 뚫려 있어 바깥이 보임)
+  ctx.fillStyle='#1d2025'; roundRect(-86,-76,172,16,6); ctx.fill();                       // 후드
+  sightHousing(-82,-64,164,122,-64,-48,128,90,'#2b2f36','#16181c');
+  ctx.fillStyle='rgba(140,255,170,0.05)'; roundRect(-64,-48,128,90,8); ctx.fill();          // 유리 색
+  ctx.strokeStyle='rgba(200,255,220,0.25)'; ctx.lineWidth=1.5; roundRect(-64,-48,128,90,8); ctx.stroke();
+  ctx.fillStyle='#0b0c0e'; roundRect(82,-30,10,34,3); ctx.fill(); roundRect(-92,-30,10,34,3); ctx.fill();   // 버튼
+  ctx.fillStyle=mt<60?'#f4ffb0':'#c8ff3a'; roundRect(60,-60,16,8,2); ctx.fill();            // 상태 화면
+  // 조준점 (적을 겨누면 빨강)
+  const rc=aimOnTarget?'#ff4a4a':'#d4ff4a';
+  glowPath(rc,1.4,()=>{ ctx.arc(0,0,22,0,Math.PI*2); });
+  glowPath(rc,1.2,()=>{ ctx.moveTo(0,-30); ctx.lineTo(0,-24); ctx.moveTo(0,24); ctx.lineTo(0,30); ctx.moveTo(-30,0); ctx.lineTo(-24,0); ctx.moveTo(24,0); ctx.lineTo(30,0); });
+  glowDot(0,0,2.2,rc,1);
+  // 11) 떠 있는 READY 표시
+  drawHoloTag(90,-120,now,charge,lt,OR);
+  ctx.restore();
+}
+
+// 저격소총 LUX-VALOR — 가운데 조준: 뒤에서 스코프 접안부를 들여다봄 (스코프 안으로 바깥이 보임)
+function drawSniperADS(now,u){
+  const s=weaponScale(), k=recoilAmt, mt=now-muzzle;
+  const CY='#4ff0ff', BL='#2f6fd6', GOLD='#d9b45a';
+  const rise=(1-_smooth(u))*H*0.6;
+  // 볼트 조작 (옆모습과 같은 타이밍)
+  const bu=(mt>200 && mt<800)?(mt-200)/600:-1;
+  let back=0, lift=0;
+  if(bu>=0){
+    lift = bu<0.15?bu/0.15 : bu>0.85?(1-bu)/0.15 : 1;
+    back = bu<0.15?0 : bu<0.5?_easeOut((bu-0.15)/0.35) : bu<0.85?1-_easeIn((bu-0.5)/0.35) : 0;
+    if(bu>=0.45 && !sniperEjected){ sniperEjected=true; spawnCasing(true); }
+  }
+  const hb = bu<0?0 : bu<0.12?bu/0.12 : bu>0.88?(1-bu)/0.12 : 1;
+  ctx.save();
+  ctx.translate(recoilJit*k*200, -H/2 + rise - k*40*s);   // 저격총은 반동이 커서 더 크게 튐
+  ctx.rotate(recoilJit*k*0.5);
+  ctx.scale(s,s);
+  const M=ctx.getTransform(), tp=(x,y)=>{ const q=M.transformPoint(new DOMPoint(x,y)); return {x:q.x,y:q.y}; };
+  gunFx.muzzle=tp(0,40); gunFx.eject=tp(92,120); gunFx.pod=null;
+  const wg=(y0,y1)=>{ const g=ctx.createLinearGradient(0,y0,0,y1); g.addColorStop(0,'#f4f8fc'); g.addColorStop(0.6,'#dfe6ef'); g.addColorStop(1,'#b9c5d4'); return g; };
+
+  // 1) 총구 빛 (하늘색) — 스코프 둘레로 번짐
+  if(mt<160){
+    const f=1-mt/160;
+    const lg=ctx.createRadialGradient(0,40,0,0,40,260);
+    lg.addColorStop(0,`rgba(170,250,255,${0.55*f})`); lg.addColorStop(1,'rgba(80,220,255,0)');
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(0,40,260,0,7); ctx.fill();
+  }
+  // 2) 핸드가드 앞부분 + 하늘색 통풍구
+  ctx.fillStyle=wg(70,120); ctx.beginPath(); ctx.moveTo(-30,72); ctx.lineTo(30,72); ctx.lineTo(42,118); ctx.lineTo(-42,118); ctx.closePath(); ctx.fill();
+  for(let i=0;i<2;i++){ const pl=0.55+0.45*Math.sin(now*0.005+i); ctx.fillStyle=rgba(CY,0.5+0.5*pl); roundRect(-26+i*40,82,12,9,3); ctx.fill(); }
+  // 3) 왼팔·왼손 (흰 장갑)
+  drawArm(-430,760,-50,112,62,'#d9e1ec',BL);
+  drawHand(-48,110,30,'#e9eef5','#c4cfdd',GOLD);
+  // 4) 탄창 (회복탄 칸)
+  ctx.save(); ctx.translate(-72,190); ctx.rotate(0.12);
+  ctx.fillStyle=wg(0,150); roundRect(0,0,52,150,8); ctx.fill();
+  ctx.fillStyle=BL; roundRect(0,136,52,14,5); ctx.fill();
+  for(let i=0;i<maxammo;i++){ ctx.fillStyle=i<ammo?CY:'rgba(40,80,110,0.6)'; roundRect(34,116-i*17,12,10,3); ctx.fill(); }
+  ctx.restore();
+  // 5) 스코프 받침
+  ctx.fillStyle='#93a3b8'; roundRect(-40,60,18,40,4); ctx.fill(); roundRect(22,60,18,40,4); ctx.fill();
+  // 6) 리시버 뒷면 + 회복약 유리관 끝 (소용돌이가 돎)
+  ctx.fillStyle=wg(96,210); roundRect(-64,96,128,112,12); ctx.fill();
+  ctx.fillStyle=BL; roundRect(-64,192,128,16,6); ctx.fill();
+  ctx.strokeStyle=GOLD; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(0,146,30,0,7); ctx.stroke();
+  const tg=ctx.createRadialGradient(0,146,2,0,146,28); tg.addColorStop(0,'rgba(220,255,255,0.98)'); tg.addColorStop(1,'rgba(30,140,200,0.95)');
+  ctx.fillStyle=tg; ctx.beginPath(); ctx.arc(0,146,27,0,7); ctx.fill();
+  ctx.strokeStyle='rgba(230,255,255,0.8)'; ctx.lineWidth=2;
+  for(let n=0;n<3;n++){ const a0=now*0.004+n*2.1; ctx.beginPath(); ctx.arc(0,146,16-n*4,a0,a0+2.2); ctx.stroke(); }
+  // 7) 개머리판 + 하늘색 캡슐
+  ctx.fillStyle=wg(200,900); ctx.beginPath(); ctx.moveTo(-50,206); ctx.lineTo(50,206); ctx.lineTo(150,900); ctx.lineTo(-120,900); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=BL; ctx.beginPath(); ctx.moveTo(-10,206); ctx.lineTo(10,206); ctx.lineTo(24,900); ctx.lineTo(-4,900); ctx.closePath(); ctx.fill();
+  glowDot(6,320,10,CY,0.8);
+  // 8) 노리쇠 손잡이 (쏜 뒤 앞으로 당겨지며 커짐) + 오른손
+  const bx=84+back*24, by=128+back*44-lift*22, br=12*(1+back*0.35);
+  ctx.strokeStyle='#cfd8e4'; ctx.lineWidth=9; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(56,128); ctx.lineTo(bx,by); ctx.stroke();
+  ctx.fillStyle=GOLD; ctx.beginPath(); ctx.arc(bx,by,br,0,7); ctx.fill();
+  ctx.fillStyle='#fff3c8'; ctx.beginPath(); ctx.arc(bx-3,by-3,br*0.35,0,7); ctx.fill();
+  ctx.save(); ctx.translate(92,210); ctx.rotate(-0.25);
+  ctx.fillStyle=wg(0,96); roundRect(-18,0,40,96,10); ctx.fill();
+  ctx.restore();
+  const RHX=_lerp(104,bx+6,hb), RHY=_lerp(268,by+6,hb);
+  drawArm(470,760,RHX,RHY,68,'#d9e1ec',BL);
+  drawHand(RHX,RHY,34,'#e9eef5','#c4cfdd',GOLD);
+  // 9) 스코프 접안부 — 둥근 렌즈 안으로 바깥이 보이고, 가는 십자선과 조준점
+  ctx.fillStyle=wg(-80,80);
+  ctx.beginPath(); ctx.arc(0,0,78,0,Math.PI*2); ctx.arc(0,0,54,0,Math.PI*2,true); ctx.fill('evenodd');
+  ctx.strokeStyle=BL; ctx.lineWidth=10; ctx.beginPath(); ctx.arc(0,0,66,0,7); ctx.stroke();
+  ctx.strokeStyle=GOLD; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,72,0,7); ctx.stroke();
+  const vg=ctx.createRadialGradient(0,0,36,0,0,54); vg.addColorStop(0,'rgba(0,30,50,0)'); vg.addColorStop(1,'rgba(0,30,50,0.55)');
+  ctx.fillStyle=vg; ctx.beginPath(); ctx.arc(0,0,54,0,7); ctx.fill();
+  ctx.fillStyle='rgba(120,240,255,0.05)'; ctx.beginPath(); ctx.arc(0,0,54,0,7); ctx.fill();
+  const rc=aimOnTarget?'#ff4a4a':CY;
+  ctx.strokeStyle=rgba(rc,0.85); ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(-52,0); ctx.lineTo(-8,0); ctx.moveTo(8,0); ctx.lineTo(52,0); ctx.moveTo(0,-52); ctx.lineTo(0,-8); ctx.moveTo(0,8); ctx.lineTo(0,52); ctx.stroke();
+  glowDot(0,0,2,rc,1);
+  // 10) 회복 스킬 표시창
+  ctx.save(); ctx.translate(86,-128+Math.sin(now*0.004+1)*3);
+  ctx.fillStyle='rgba(80,230,255,0.14)'; roundRect(0,0,76,40,5); ctx.fill();
+  ctx.strokeStyle='rgba(120,240,255,0.65)'; ctx.lineWidth=1.2; roundRect(0,0,76,40,5); ctx.stroke();
+  ctx.fillStyle=(abilActive && Math.floor(now/150)%2)?'#e8fff0':'#7dff9a'; ctx.fillRect(10,17,16,6); ctx.fillRect(15,12,6,16);
+  ctx.fillStyle='rgba(120,240,255,0.85)'; ctx.fillRect(34,24,34*abilCharge(now),5);
+  ctx.strokeStyle='rgba(120,240,255,0.5)'; ctx.strokeRect(34,24,34,5);
+  ctx.fillStyle='rgba(150,240,255,0.9)'; ctx.font='bold 7px Orbitron,monospace'; ctx.fillText(abilActive?'HEALING':'HEAL',36,17);
+  ctx.restore();
   ctx.restore();
 }
 
@@ -1595,14 +1821,15 @@ function updateHUD(now){
   el('timeVal').textContent=(gameTime/1000).toFixed(1);
   // 조준 표시 (사격 영웅): 크로스헤어가 적을 겨누면 빨갛게
   const cross = document.querySelector('.cross');
-  if(adsActive && hero && hero.weapon==='sniper'){
+  aimOnTarget = hero.fireMode!=='melee' && !paused && !!rayHitEnemy(player.x,player.y,player.ang);
+  const sightUp = (hero.weapon==='rifle' || hero.weapon==='sniper') && aimBlend>0.7;   // 조준경으로 겨누는 중
+  if((adsActive && hero && hero.weapon==='sniper') || sightUp){
     cross.classList.add('hide');  // 스코프 사용 중엔 CSS 크로스헤어 숨김
   } else {
     cross.classList.remove('hide');
     cross.style.transform=`translate(-50%,-50%) scale(${(1+recoilAmt*0.35).toFixed(3)})`;
     if(hero.fireMode!=='melee'){
-      const on = !paused && !!rayHitEnemy(player.x,player.y,player.ang);
-      cross.classList.toggle('on', on);
+      cross.classList.toggle('on', aimOnTarget);
     } else {
       cross.classList.remove('on');
     }
@@ -1632,7 +1859,7 @@ function loop(t){
       const nowP=performance.now(), hold=hero.weapon==='sniper'?1200:650;
       let target=(firing || nowP-muzzle<hold || nowP-missileFireT<700) ? 1 : 0;
       if(reloading) target=Math.min(target,0.35);
-      aimBlend += (target-aimBlend)*Math.min(1, target>aimBlend ? dt/55 : dt/170);
+      aimBlend += (target-aimBlend)*Math.min(1, target>aimBlend ? dt/70 : dt/170);
     }
   }
   // 반동·흔들림 감쇠 (시간 기반) — 반동은 클수록 빨리 돌아옴

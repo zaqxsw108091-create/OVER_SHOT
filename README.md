@@ -37,7 +37,7 @@ Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, an
 - **Katana "RISING DRAGON"** (Kage) — blade with a cyan glow line and a black-and-gold tsuba, held across the screen. Three-phase samurai swing (guard pose → 上段 → 袈裟斬り) with a cyan slash trail.
 
 ### Firing Feedback
-- Gun stance: when not shooting, the rifle and sniper are held in a **low ready** position (stock at the shoulder, muzzle pointed down). Pressing fire raises the gun into a **shouldered aim** in about 0.1 s — level, closer to the eye, aimed near the crosshair, with less sway. About 0.65 s after the last shot it lowers again over about 0.35 s. The pose blends smoothly (smoothstep) with a slight lift and cant mid-way, so it does not snap.
+- Gun stance: when not shooting, the rifle and sniper are shown side-on in a **low ready** position (stock at the shoulder, muzzle pointed down). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot the gun lowers back to low ready. Sway is reduced while aiming.
 - Every shot: recoil kick with a little sideways jitter, the bolt cycles in the ejection port, a shell casing flies out, muzzle smoke, a brief bullet tracer to the crosshair, sparks or dust where it lands, and the hit enemy flashes white and is pushed back a little. Killed enemies tip over and fade out.
 - Reload: the gun tilts, the empty magazine drops, a new one goes in, then the charging handle is pulled. The sniper's right hand works the bolt after every shot.
 - Missile skill: the pod kicks back and flashes, and the floating hologram switches READY → LAUNCH → charge %.
@@ -105,7 +105,7 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~1,690 lines, single file)
+├── game.js           # Complete game engine (~1,890 lines, single file)
 └── GAME_GUIDE.md     # Full feature & gameplay reference (Korean)
 ```
 
