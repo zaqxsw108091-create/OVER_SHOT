@@ -1502,29 +1502,75 @@ function iaiSlash(){
 // 중단 자세 대기, 袈裟斬り(케사기리) 사선 베기 모션
 // 디자인: 은빛 날 + 하늘색 발광선, 금 테두리의 검은 쓰바(용 문양), 금색 마름모 자루 감기
 let kTrail=[];   // 베는 동안 칼끝이 지나간 자리 (궤적 그리기용)
-// 칼자루를 감싸 쥔 손 — 손가락 4개가 자루를 가로질러 반대편으로 감싸고, 손등·너클은 팔 쪽에 보임
-// (hx,hy) 손 중심(자루 위), (ux,uy) 칼끝 쪽 자루 방향(단위벡터), (ax,ay) 팔이 오는 점
+// 색을 밝게(k>0, 흰색 쪽) 또는 어둡게(k<0, 검은색 쪽) 섞기
+function tint(hex,k){
+  const n=parseInt(hex.slice(1),16), t=k>0?255:0, f=Math.abs(k);
+  const c=v=>Math.round(v+(t-v)*f);
+  return `rgb(${c(n>>16&255)},${c(n>>8&255)},${c(n&255)})`;
+}
+// 칼자루를 감싸 쥔 손 (입체 음영)
+//  손등은 팔 쪽, 손가락 4개는 자루를 가로질러 반대편으로 감싸고, 엄지는 칼끝 쪽에서 자루 위를 덮음
+//  (hx,hy) 손 중심(자루 위), (ux,uy) 칼끝 쪽 자루 방향(단위벡터), (ax,ay) 팔이 오는 점, r 손 크기
 function drawGripHand(hx,hy,ux,uy,ax,ay,r,base,finger,accent){
   const side = ((ax-hx)*(-uy) + (ay-hy)*ux) >= 0 ? 1 : -1;   // 팔이 자루의 어느 편에 있는지
-  const Y=(v)=>side*v;                                          // 팔 쪽이 +가 되도록 뒤집기
-  ctx.save(); ctx.translate(hx,hy); ctx.rotate(Math.atan2(uy,ux));
-  // 손등 (팔 쪽)
-  ctx.fillStyle=base; roundRect(-r*0.62, Math.min(Y(r*0.02),Y(r*0.98)), r*1.24, r*0.96, r*0.35); ctx.fill();
-  // 손가락: 자루를 가로질러 반대편으로 감쌈
+  const OUT='rgba(4,6,10,0.55)';
+  ctx.save(); ctx.translate(hx,hy); ctx.rotate(Math.atan2(uy,ux)); ctx.scale(1,side);   // 팔 쪽이 +y
+  ctx.lineJoin='round';
+  // 자루에 드리운 손 그림자 (손이 자루 위에 얹힌 느낌)
+  const sh=ctx.createRadialGradient(0,0,r*0.2,0,0,r*1.05);
+  sh.addColorStop(0,'rgba(0,0,0,0.35)'); sh.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=sh; ctx.beginPath(); ctx.ellipse(0,0,r*1.05,r*0.8,0,0,7); ctx.fill();
+
+  // 손등: 손목 쪽이 좁아지는 사다리꼴, 빛은 너클 쪽이 밝음
+  const gB=ctx.createLinearGradient(0,r*0.05,0,r*1.0);
+  gB.addColorStop(0,tint(base,0.22)); gB.addColorStop(0.45,base); gB.addColorStop(1,tint(base,-0.35));
+  ctx.fillStyle=gB; ctx.strokeStyle=OUT; ctx.lineWidth=1.4;
+  ctx.beginPath();
+  ctx.moveTo(-r*0.62,r*0.10);
+  ctx.quadraticCurveTo(-r*0.66,r*0.62,-r*0.44,r*0.98);
+  ctx.lineTo(r*0.40,r*0.98);
+  ctx.quadraticCurveTo(r*0.64,r*0.60,r*0.60,r*0.10);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // 손등 힘줄 하이라이트
+  ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=r*0.06; ctx.lineCap='round';
+  for(const x of [-0.28,0.0,0.28]){ ctx.beginPath(); ctx.moveTo(x*r,r*0.26); ctx.lineTo(x*r*0.8,r*0.72); ctx.stroke(); }
+
+  // 손가락 4개: 자루를 감싸 반대편으로 말려 들어감 (원통 음영: 가운데 밝고 끝으로 갈수록 어두움)
+  const fw=r*0.30;
   for(let i=0;i<4;i++){
-    const x=-r*0.48+i*r*0.32;
-    ctx.fillStyle=finger; roundRect(x-r*0.14, Math.min(Y(-r*0.64),Y(r*0.12)), r*0.28, r*0.76, r*0.13); ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.fillRect(x-r*0.06, Math.min(Y(-r*0.56),Y(-r*0.42)), r*0.12, r*0.14);   // 손톱 쪽 끝
+    const x=-r*0.45+i*r*0.30, len=(i===0||i===3)?0.56:0.64;   // 검지·새끼는 조금 짧게
+    const gF=ctx.createLinearGradient(0,r*0.14,0,-r*len);
+    gF.addColorStop(0,tint(finger,-0.25)); gF.addColorStop(0.35,tint(finger,0.20)); gF.addColorStop(1,tint(finger,-0.45));
+    ctx.fillStyle=gF; ctx.strokeStyle=OUT; ctx.lineWidth=1.2;
+    roundRect(x-fw/2, -r*len, fw, r*(len+0.16), fw*0.48); ctx.fill(); ctx.stroke();
+    // 손가락 마디 주름
+    ctx.strokeStyle='rgba(0,0,0,0.28)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x-fw*0.32,-r*len*0.42); ctx.lineTo(x+fw*0.32,-r*len*0.42); ctx.stroke();
   }
-  // 너클 줄 (자루 바로 옆)
-  ctx.fillStyle='rgba(255,255,255,0.12)'; roundRect(-r*0.58, Math.min(Y(r*0.04),Y(r*0.24)), r*1.16, r*0.2, r*0.1); ctx.fill();
+  // 너클 줄: 손가락이 꺾이는 곳 (둥근 관절 4개)
+  for(let i=0;i<4;i++){
+    const x=-r*0.45+i*r*0.30;
+    const gK=ctx.createRadialGradient(x-r*0.04,r*0.08,0,x,r*0.12,r*0.17);
+    gK.addColorStop(0,tint(base,0.35)); gK.addColorStop(1,base);
+    ctx.fillStyle=gK; ctx.strokeStyle=OUT; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.ellipse(x,r*0.13,r*0.155,r*0.12,0,0,7); ctx.fill(); ctx.stroke();
+  }
   // 엄지: 칼끝 쪽에서 자루 위를 비스듬히 덮음
-  ctx.save(); ctx.translate(r*0.58, Y(r*0.18)); ctx.rotate(-side*0.55);
-  ctx.fillStyle=base; roundRect(-r*0.14,-r*0.4,r*0.3,r*0.62,r*0.15); ctx.fill(); ctx.restore();
-  // 손목 띠
-  ctx.fillStyle=accent; roundRect(-r*0.55, Math.min(Y(r*0.86),Y(r*1.0)), r*1.1, r*0.14, r*0.06); ctx.fill();
+  ctx.save(); ctx.translate(r*0.56,r*0.22); ctx.rotate(-0.62);
+  const gT=ctx.createLinearGradient(-r*0.16,0,r*0.16,0);
+  gT.addColorStop(0,tint(base,-0.30)); gT.addColorStop(0.5,tint(base,0.18)); gT.addColorStop(1,tint(base,-0.30));
+  ctx.fillStyle=gT; ctx.strokeStyle=OUT; ctx.lineWidth=1.2;
+  roundRect(-r*0.15,-r*0.52,r*0.30,r*0.72,r*0.15); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // 손목 띠 (장갑 끝)
+  const gW=ctx.createLinearGradient(-r*0.5,0,r*0.5,0);
+  gW.addColorStop(0,tint(accent,-0.35)); gW.addColorStop(0.45,tint(accent,0.25)); gW.addColorStop(1,tint(accent,-0.35));
+  ctx.fillStyle=gW; ctx.strokeStyle=OUT; ctx.lineWidth=1;
+  roundRect(-r*0.48,r*0.86,r*0.94,r*0.16,r*0.06); ctx.fill(); ctx.stroke();
   ctx.restore();
 }
+// 3D 칼 모델은 게임 시작 때 미리 읽어 둔다 (실패하면 2D 칼)
+if(typeof Kage3D!=='undefined') Kage3D.load();
 function drawKatana(now){
   const KATANA_MS=500;
   const handleL=124, BLADE=430;   // 자루·실제 날 길이
@@ -1535,10 +1581,11 @@ function drawKatana(now){
   //  겨눔(中段): 오른쪽 아래에서 칼끝이 화면 가운데(적)를 향함. 날은 아래쪽, 칼이 화면 안쪽으로 뻗어 짧아 보임
   //  들기(上段): 손을 오른쪽 위로 올려 칼을 어깨 위로 세움
   //  베기(袈裟斬り): 손이 왼쪽 아래로 내려가며 칼날이 앞장서서 사선으로 벰 (손과 칼이 함께 움직임)
-  const IDLE=[250,-160,-0.62,0.86], UP=[300,-320,0.55,1.0], CUT=[-60,40,-2.25,1.0];
+  //  (5번째 값: 3D 칼의 비틀림 — 겨눔 땐 칼면이 살짝 보이고, 벨 땐 날이 앞장섬)
+  const IDLE=[250,-160,-0.62,0.86,0.30], UP=[300,-320,0.55,1.0,0.05], CUT=[-60,40,-2.25,1.0,-0.35];
   const mix=(A,B,u)=>A.map((v,i)=>_lerp(v,B[i],u));
   const breath=Math.sin(now*0.0018);
-  let K=[IDLE[0], IDLE[1]+breath*4, IDLE[2]+breath*0.02, IDLE[3]];
+  let K=[IDLE[0], IDLE[1]+breath*4, IDLE[2]+breath*0.02, IDLE[3], IDLE[4]];
   let t=-1;
   if(swingT && now-swingT<KATANA_MS){
     t=(now-swingT)/KATANA_MS;
@@ -1546,28 +1593,53 @@ function drawKatana(now){
     else if(t<0.52) K=mix(UP,CUT,_easeIn((t-0.20)/0.32));       // 사선 베기 (점점 빨라짐)
     else            K=mix(CUT,IDLE,_smooth((t-0.52)/0.48));     // 겨눔 자세로 돌아옴
   }
+  // 3D 칼(직접 만든 GLB 모델)을 쓸 수 있으면 그것을, 아니면 2D 그림 칼을 그린다
+  const use3D = typeof Kage3D!=='undefined' && Kage3D.ready;
   const px=K[0], py=K[1], bladeL=BLADE*K[3];
   let a=K[2];
 
   const dx=Math.sin(a), dy=-Math.cos(a);
   const pommX=px-dx*handleL, pommY=py-dy*handleL;  // 자루 끝(봉미)
   const tsubX=px+dx*8,       tsubY=py+dy*8;         // 쓰바(가드)
-  const tipX =px+dx*bladeL,  tipY =py+dy*bladeL;    // 칼끝(키사키)
+  const tipL = use3D ? (BLADE+30)*K[3] : bladeL;     // 3D 모델은 칼끝(키사키)까지 포함한 길이
+  const tipX =px+dx*tipL,    tipY =py+dy*tipL;      // 칼끝(키사키)
   const perpX=dy, perpY=-dx;                         // 날에 수직 방향
-  const rhx=px-dx*24, rhy=py-dy*24;                  // 오른손 (쓰바 바로 아래)
-  const lhx=px-dx*96, lhy=py-dy*96;                  // 왼손 (자루 끝, 사이에 자루가 한 뼘 보임)
+  const U3 = use3D ? 460/Kage3D.tipLen : 0;           // 3D 모델 1단위 = 픽셀 (칼끝이 2D 칼과 같은 자리에 오게)
+  // 손 위치(쓰바에서 자루 방향으로 떨어진 거리). 3D는 실제 자루 길이에 맞추고, 칼이 화면 안쪽으로 기울면 그만큼 짧아 보임
+  const rD = use3D ? 22*K[3] : 24;
+  const lD = use3D ? (Kage3D.wrap1*U3-22)*K[3] : 96;
+  const rhx=px-dx*rD, rhy=py-dy*rD;                  // 오른손 (쓰바 바로 아래)
+  const lhx=px-dx*lD, lhy=py-dy*lD;                  // 왼손 (자루 끝, 사이에 자루가 한 뼘 보임)
 
   // 팔 (양손 잡기 — 사무라이 특유 두 손 자세)
   // 오른팔: 파란 장갑 + 금색 손목 링 / 왼팔: 검은 소매
   const LAX=500, LAY=470, RAX=330, RAY=470;          // 팔이 시작되는 화면 아래 지점 — 두 팔뚝이 자루를 가리지 않게 자루 양옆으로 내려감
-  const armTo=(sx,sy,hx,hy,w,c0,c1)=>{                // 팔뚝: 소매 + 위쪽 줄무늬, 손목에서 끝남
+  const armTo=(sx,sy,hx,hy,w,c0,c1)=>{                // 팔뚝: 원통 음영 소매 + 줄무늬, 손목에서 끝남
+    const L=Math.hypot(hx-sx,hy-sy)||1, nx=-(hy-sy)/L, ny=(hx-sx)/L, mx=(sx+hx)/2, my=(sy+hy)/2;
+    const g=ctx.createLinearGradient(mx-nx*w/2,my-ny*w/2,mx+nx*w/2,my+ny*w/2);
+    g.addColorStop(0,tint(c0,-0.45)); g.addColorStop(0.35,tint(c0,0.12)); g.addColorStop(0.6,c0); g.addColorStop(1,tint(c0,-0.55));
     ctx.lineCap='round';
-    ctx.strokeStyle=c0; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(hx,hy); ctx.stroke();
-    ctx.strokeStyle=c1; ctx.lineWidth=w*0.22; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(_lerp(sx,hx,0.82),_lerp(sy,hy,0.82)); ctx.stroke();
+    ctx.strokeStyle='rgba(4,6,10,0.6)'; ctx.lineWidth=w+3; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.strokeStyle=g; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(hx,hy); ctx.stroke();
+    ctx.strokeStyle=c1; ctx.lineWidth=w*0.16; ctx.beginPath();
+    ctx.moveTo(sx-nx*w*0.12,sy-ny*w*0.12); ctx.lineTo(_lerp(sx,hx,0.8)-nx*w*0.12,_lerp(sy,hy,0.8)-ny*w*0.12); ctx.stroke();
   };
-  armTo(LAX,LAY,lhx,lhy,50,'#15171c','#2a2e36');     // 왼팔 (검은 소매)
-  armTo(RAX,RAY,rhx,rhy,54,'#1d3c6e','#2f63b0');     // 오른팔 (파란 갑옷 소매)
+  // 손 크기, 그리고 팔이 끝나는 손목 위치 (손 중심에서 팔 쪽으로 — 팔이 손 밖으로 삐져나오지 않게)
+  const hs = use3D ? 0.92 : 1;                         // 3D 자루는 실제 비율이라 더 가늘어서 손도 그에 맞춤
+  const LR=36*hs, RR=38*hs;
+  const wrist=(hx,hy,ax,ay,r)=>{ let nx=-dy, ny=dx; if((ax-hx)*nx+(ay-hy)*ny<0){ nx=-nx; ny=-ny; }
+    return [hx+nx*r*0.8, hy+ny*r*0.8]; };
+  const [lwx,lwy]=wrist(lhx,lhy,LAX,LAY,LR), [rwx,rwy]=wrist(rhx,rhy,RAX,RAY,RR);
+  armTo(LAX,LAY,lwx,lwy,LR*1.25,'#15171c','#2a2e36');   // 왼팔 (검은 소매)
+  armTo(RAX,RAY,rwx,rwy,RR*1.3,'#1d3c6e','#2f63b0');    // 오른팔 (파란 갑옷 소매)
 
+  if(use3D){
+    // 베는 동안: 발광선이 강해지고, 날을 따라 섬광이 한 번 훑고 지나감
+    const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.42)/0.22) : 0;
+    Kage3D.draw(ctx,{ px, py, dx, dy, lean:K[3], roll:K[4], unit:U3,
+      glow: 1.0 + 0.12*Math.sin(now*0.004) + 1.1*cutGlow,
+      glint: (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : -9 });
+  } else {
   // 쓰카(자루) 본체 — 검은 감기
   ctx.strokeStyle='#0b0c0f'; ctx.lineWidth=29; ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(pommX,pommY); ctx.lineTo(tsubX,tsubY); ctx.stroke();
@@ -1649,9 +1721,11 @@ function drawKatana(now){
   ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(0,-30); ctx.lineTo(6,0); ctx.closePath(); ctx.fill();
   ctx.restore();
 
+  }   // 2D 칼 끝
+
   // 두 손 — 오른손 파란 장갑(금 테두리), 왼손 검은 반장갑(손가락 끝이 보임)
-  drawGripHand(lhx,lhy,dx,dy,LAX,LAY,36,'#15171c','#262a32','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
-  drawGripHand(rhx,rhy,dx,dy,RAX,RAY,38,'#1d3c6e','#2f63b0',GOLD);        // 오른손: 쓰바 바로 아래를 감싸 쥠
+  drawGripHand(lhx,lhy,dx,dy,LAX,LAY,LR,'#1b1e25','#2b2f39','#3a8be0');   // 왼손: 자루 끝을 감싸 쥠
+  drawGripHand(rhx,rhy,dx,dy,RAX,RAY,RR,'#1d3c6e','#2f63b0','#c9a24a');   // 오른손: 쓰바 바로 아래를 감싸 쥠
 
   // ── 베기 이펙트: 칼날이 실제로 지나간 자리를 따라가는 하늘색 궤적 ──
   if(t>0.18 && t<0.56){
