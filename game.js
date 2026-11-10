@@ -120,6 +120,7 @@ let firing=false, muzzle=0, swingT=0, swingHitDone=true;
 let recoilAmt=0, shake=0, sway=0;
 let adsActive=false, iaiFlash=0;
 let missiles=[], blasts=[];
+let barrierHits=[], barrierOffT=-1e9, meleeKick=0;   // 타이탄 방어막: 맞은 자리(물결)·꺼진 시각, 근접 타격 때 시야 흔들림
 const keys={};
 
 function startGame(){
@@ -129,7 +130,8 @@ function startGame(){
   kills=0; enemies=[]; bullets=[]; missiles=[]; blasts=[]; running=true; paused=true; gameTime=0;
   recoilAmt=0; shake=0; swingHitDone=true;
   abilActive=false; abilReady=true; abilCdEnd=0;
-  adsActive=false; iaiFlash=0;
+  adsActive=false; iaiFlash=0; swingT=0;
+  barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset();
   fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true; aimBlend=0;
   el('abilName').textContent = hero.ability + ' [E]';
   el('ammoVal').textContent = hero.fireMode==='melee' ? '∞' : ammo;
@@ -374,7 +376,10 @@ function attack(){
 }
 // 근접: 스윙만 시작, 데미지는 임팩트 순간(loop)에서 적용
 const SWING_MS=420, SWING_IMPACT=210;
-function startSwing(now){ lastShot=now; swingT=now; swingHitDone=false; }
+function startSwing(now){
+  if(titanRigOn()) titanSwingStart(now);
+  lastShot=now; swingT=now; swingHitDone=false;
+}
 function applyMelee(){
   let hitAny=false;
   for(const e of [...enemies]){
@@ -388,8 +393,9 @@ function applyMelee(){
     e.hp -= hero.dmg; hitAny=true;
     if(e.hp<=0) killEnemy(e);
   }
-  if(hitAny){ hitMarker(); shake=Math.max(shake,9); }
-  else shake=Math.max(shake,3); // 헛스윙도 약한 진동
+  if(hero.weapon==='hammer'){ titanHit=hitAny; if(hitAny) titanStopT=performance.now(); meleeKick=hitAny?13:7; }
+  if(hitAny){ hitMarker(); shake=Math.max(shake, hero.weapon==='hammer'?14:9); }
+  else shake=Math.max(shake, hero.weapon==='hammer'?6:3); // 헛스윙도 약한 진동
 }
 function currentFireRate(){ return hero.fireRate; }
 
@@ -448,6 +454,7 @@ function useAbility(){
   }
   abilActive=true; abilReady=false;
   abilEnd=now+hero.abilDur;
+  if(hero.abilType==='barrier'){ titanDeployT=now; barrierHits=[]; shake=Math.max(shake,5); }
   toast(hero.ability+' 발동!', hero.color);
 }
 function launchMissile(){
@@ -488,7 +495,7 @@ const HEAL_PER_SEC = 10.8; // 회복 스킬: 초당 회복량 (모니터 주사�
 function updateAbility(now, dt){
   if(abilActive){
     if(hero.abilType==='heal'){ player.hp=Math.min(player.maxhp,player.hp+HEAL_PER_SEC*dt/1000); }
-    if(now>=abilEnd){ abilActive=false; abilCdEnd=now+hero.abilCd; }
+    if(now>=abilEnd){ abilActive=false; abilCdEnd=now+hero.abilCd; if(hero.abilType==='barrier') barrierOffT=performance.now(); }
   }
   if(!abilActive && !abilReady && now>=abilCdEnd){ abilReady=true; }
   let pct;
@@ -515,6 +522,13 @@ function updateEnemies(dt,now){
     // 사격
     if(see && dist<8 && now-e.lastShot>1100){
       e.lastShot=now;
+      if(abilActive && hero.id==='titan'){            // 방어막에 총알이 부딪힌 자리에 물결
+        const pp=projectPoint(e.x,e.y);
+        if(Math.abs(pp.ang)<0.75){
+          barrierHits.push({ x:Math.max(-0.8,Math.min(0.8,pp.sx/W*2-1))+(Math.random()-0.5)*0.12, y:(Math.random()-0.5)*0.6, t:performance.now() });
+          if(barrierHits.length>4) barrierHits.shift();
+        }
+      }
       if(Math.random()<0.55){ // 명중 확률
         let dmg = 8 + Math.random()*6;
         if(abilActive && hero.id==='titan') dmg*=0.3; // 방벽
@@ -563,7 +577,7 @@ function render(){
   // 쏠 때 시야가 살짝 위로 튐 (총구가 들리는 만큼 세상이 아래로)
   const kick = (hero && hero.fireMode!=='melee') ? recoilAmt*(hero.weapon==='sniper'?14:5) : 0;
   ctx.save();
-  ctx.translate(sx, sy+kick);
+  ctx.translate(sx, sy+kick+meleeKick);
 
   // 하늘 / 바닥 (흔들림 대비 여유있게 큰 영역)
   const skyG = ctx.createLinearGradient(0,0,0,H/2);
@@ -616,7 +630,7 @@ function render(){
   }
 
   // 방벽 (탱커 스킬) — 반투명이라 너머의 적도 보임
-  if(abilActive && hero.id==='titan') drawBarrier();
+  if(hero.id==='titan' && (abilActive || performance.now()-barrierOffT<420)) drawBarrier();
 
   drawWorldFx(performance.now());   // 탄착 불꽃·먼지
 
@@ -672,7 +686,19 @@ function drawSprite(o,dist,kind){
 }
 
 function drawBarrier(){
-  // 육각 벌집 에너지 방벽 (SENTINEL MAUL 디자인과 같은 파란 육각 보호막)
+  // 3D 방어막: 굽은 육각 벌집 판 — 가운데부터 칸칸이 펼쳐지고, 총알이 맞은 자리에서 물결이 퍼지고, 끝나면 칸이 흩어지며 꺼짐
+  if(typeof Titan3D!=='undefined' && Titan3D.ready){
+    const now=performance.now();
+    const k = abilActive ? Math.min(1,(now-(abilEnd-hero.abilDur))/460) : 1;
+    const left = abilActive ? abilEnd-now : 0;
+    Titan3D.drawShield(ctx,{ time:now/1000, k:1-(1-k)*(1-k), fade: abilActive ? 1 : Math.max(0,1-(now-barrierOffT)/420),
+      low: abilActive && left<800 ? 1-left/800 : 0,
+      hits: barrierHits.map(h=>({x:h.x, y:h.y, age:(now-h.t)/1000})),
+      ox: -titanTurn*0.05, oy: Math.sin(now*0.0016)*0.006 });
+    return;
+  }
+  if(!abilActive) return;
+  // (WebGL2가 없을 때) 2D 육각 벌집 에너지 방벽
   const cx=W/2, cy=H/2, bw=Math.min(W*0.62,720), bh=H*0.62;
   const x0=cx-bw/2, y0=cy-bh/2, t=performance.now();
   ctx.save();
@@ -852,6 +878,7 @@ function drawHand(hx,hy,r, glove='#11151f', top='#1c2333', ring){
 
 function drawWeapon(){
   const now=performance.now();
+  if(titanRigOn()){ drawHammerRig(now); return; }   // 타이탄: 3D 망치 + 두 팔 (흔들림도 3D로 직접 계산)
   const moving = keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
   const gun = hero.weapon==='rifle' || hero.weapon==='sniper';
   const amp = (moving?1:0.4) * (gun ? 1-0.65*_smooth(aimBlend) : 1);   // 겨누는 중엔 흔들림이 줄어듦
@@ -1770,7 +1797,7 @@ function drawKatanaFx(now, cutting, reset, tipX, tipY, midX, midY, impact){
 //        크기(모델 1단위 = 픽셀), 날 방향(손 안에서 칼을 돌린 각도: -면 날이 앞-왼쪽, +면 앞-오른쪽)]
 // 팔 모델은 뼈대가 없는 한 덩어리라 크게 돌리면 팔이 화면을 가림 → 회전은 손목 정도로만, 움직임은 주먹 이동으로 냄
 const KAGE_RIG = {
-  IDLE: [  90, -170, -0.30,  0.04,  0.15, 560, -0.75],   // 겨눔(中段): 원본 모델 자세 그대로 — 두 주먹으로 쥐고 칼끝이 조준점 쪽
+  IDLE: [ 0.16,-0.200,-0.47,   0.52, 0.46,-0.72,  -0.60, 0.45,-0.65],   // 겨눔(中段): 원본 모델 자세 그대로 — 두 주먹으로 쥐고 칼끝이 조준점 쪽
   UP:   [ 150, -280,  0.10,  0.05, -0.30, 560, -0.85],   // 들기: 오른쪽 어깨 위로 (왼팔이 앞을 가로지름)
   CUT:  [-180,  -60, -0.30, -0.05,  1.00, 560, -0.60],   // 袈裟斬り: 왼쪽 아래로 사선 내리베기 — 칼이 왼쪽으로 눕고 날이 앞-왼쪽(베는 방향)
   SWING_MS: 500,
@@ -1881,6 +1908,171 @@ function drawIaiEffect(now){
 
 // 망치 SENTINEL MAUL (탱커) — 위에서 아래로 크게 내려치는 오버헤드 슬램
 // 디자인: 모서리 깎인 짙은 강철 머리 + 윗면 가시, 파랗게 빛나는 에너지 셀 4개, 파랑·주황 장갑
+// ── 전투 망치 SENTINEL MAUL (타이탄) — 3D 1인칭 ───────────────
+//  titan3d.js가 망치·장갑 두 팔을 3D로 그린다. 여기서는 자세(대기·휘두르기·방어)와 빛·궤적·충격 효과를 정한다
+//  자세 한 줄 = [기준점 위치 x,y,z,  자루 방향 x,y,z,  타격면이 향하는 방향 x,y,z]  (눈이 원점, x 오른쪽, y 위, -z 앞, 단위 미터)
+if(typeof Titan3D!=='undefined') Titan3D.load();
+const TITAN_RIG = {
+  IDLE:   [ 0.07,-0.165,-0.47,   0.52, 0.46,-0.72,  -0.60, 0.45,-0.65],   // 대기: 자루를 비스듬히 앞으로, 머리는 오른쪽 위
+  IDLE2:  [ 0.16,-0.207,-0.47,   0.50, 0.49,-0.71,  -0.60, 0.45,-0.65],   // 숨쉴 때 살짝 오르내림
+  GUARD:  [ 0.17,-0.185,-0.47,   0.44, 0.58,-0.69,  -0.60, 0.40,-0.70],   // 방어막 가동 중: 망치를 조금 세워 버팀
+  DEPLOY: [ 0.12,-0.150,-0.57,   0.34, 0.74,-0.58,  -0.50, 0.30,-0.80],   // 방어막 펼치는 순간: 망치를 앞으로 내지름
+  // 1타: 오른쪽 어깨 위로 들었다가 왼쪽 아래로 대각선 내려찍기
+  A_UP:   [ 0.19,-0.120,-0.46,   0.30, 0.90, 0.26,  -0.15, 0.50,-0.85],
+  A_HIT:  [ 0.00,-0.160,-0.60,  -0.22,-0.04,-0.97,  -0.20,-0.97, 0.10],
+  A_THRU: [-0.06,-0.260,-0.56,  -0.42,-0.32,-0.85,  -0.30,-0.85, 0.40],
+  // 2타: 왼쪽으로 당겼다가 오른쪽으로 수평 후려치기 (1타가 끝난 자리에서 자연스럽게 이어짐)
+  B_UP:   [-0.12,-0.210,-0.48,  -0.84, 0.30,-0.25,   0.20, 0.25,-0.95],
+  B_HIT:  [-0.05,-0.220,-0.56,   0.10,-0.02,-0.99,   0.98,-0.10, 0.10],
+  B_THRU: [ 0.14,-0.240,-0.50,   0.75, 0.00,-0.66,   0.66,-0.10, 0.75],
+  SWING_MS: 640,     // 휘두르기 전체 길이
+  IMPACT_MS: 282,    // 타격이 들어가는 순간 (0.44)
+  STOP_MS: 70,       // 적을 맞히면 아주 잠깐 멈춤 (묵직한 손맛)
+};
+let titanPoses=null, titanCombo=0, titanFrom=null, titanCur=null, titanHit=false, titanStopT=-1e9, titanFxDone=true;
+let titanDeployT=-1e9, titanGuard=0, titanTurn=0, titanPrevAng=0, titanPrevT=0, titanWalk=0;
+let titanRings=[], titanSparks=[];
+function titanRigOn(){ return !!hero && hero.weapon==='hammer' && typeof Titan3D!=='undefined' && Titan3D.ready; }
+function titanReset(){ titanCombo=0; titanFrom=null; titanCur=null; titanHit=false; titanStopT=-1e9; titanFxDone=true;
+  titanDeployT=-1e9; titanGuard=0; titanTurn=0; titanPrevAng=player.ang; titanPrevT=0; titanRings=[]; titanSparks=[]; }
+function titanPose(name){
+  if(!titanPoses){ titanPoses={}; for(const k in TITAN_RIG){ const a=TITAN_RIG[k];
+    if(Array.isArray(a)) titanPoses[k]=Titan3D.pose(a.slice(0,3),a.slice(3,6),a.slice(6,9)); } }
+  return titanPoses[name];
+}
+// 휘두르기 시작: 앞선 휘두르기가 끝나자마자 이어 치면 1타 → 2타로 번갈아 침. 지금 자세에서 출발해 끊김 없이 이어짐
+function titanSwingStart(now){
+  titanCombo = (swingT && now-swingT < TITAN_RIG.SWING_MS+TITAN_RIG.STOP_MS+260) ? 1-titanCombo : 0;
+  titanFrom = titanCur; titanHit=false; titanFxDone=false;
+}
+// 휘두르기가 시작된 뒤 흐른 시간 (맞혔을 때의 짧은 멈춤을 뺀 값)
+function titanElapsed(now){
+  let e=now-swingT;
+  if(titanStopT>=swingT) e-=Math.min(TITAN_RIG.STOP_MS, Math.max(0, now-titanStopT));
+  return e;
+}
+// 휘두르기 자세: u = 0~1 진행도, base = 돌아갈 대기 자세
+function titanSwingPose(u, combo, from, base){
+  const k = combo ? 'B' : 'A', UP=titanPose(k+'_UP'), HIT=titanPose(k+'_HIT'), THRU=titanPose(k+'_THRU');
+  const ui = TITAN_RIG.IMPACT_MS/TITAN_RIG.SWING_MS, u0 = combo ? 0.24 : 0.27;
+  if(u<u0){ const x=u/u0; return Titan3D.mix(from||base, UP, 1-Math.pow(1-x,2.6)); }                 // 들어올림: 빠르게 올라가 끝에서 잠깐 머묾
+  if(u<ui){ const x=(u-u0)/(ui-u0); return Titan3D.mix(UP, HIT, Math.pow(x,2.3)); }                   // 내려침: 점점 빨라짐
+  if(u<0.60){ const x=(u-ui)/(0.60-ui); return Titan3D.mix(HIT, THRU, 1-(1-x)*(1-x)); }               // 밀고 나감: 무게에 끌려감
+  const x=(u-0.60)/0.40; return Titan3D.mix(THRU, base, x*x*x*(x*(x*6-15)+10));                       // 천천히 대기 자세로
+}
+function drawHammerRig(now){
+  const R=TITAN_RIG, dt=Math.min(50, titanPrevT ? now-titanPrevT : 16); titanPrevT=now;
+  // 몸 움직임: 걸을 때 출렁임, 시점을 돌리면 무기가 살짝 늦게 따라옴
+  const moving = !paused && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']);
+  titanWalk += ((moving?1:0)-titanWalk)*Math.min(1,dt/140);
+  let dAng=player.ang-titanPrevAng; titanPrevAng=player.ang;
+  while(dAng>Math.PI) dAng-=2*Math.PI; while(dAng<-Math.PI) dAng+=2*Math.PI;
+  titanTurn += (Math.max(-1,Math.min(1,dAng/(dt*0.004)))-titanTurn)*Math.min(1,dt/110);
+  titanGuard += ((abilActive?1:0)-titanGuard)*Math.min(1,dt/150);
+  // 대기 자세 (숨쉬기) → 방어 자세 → 방어막 펼치는 동작
+  let base=Titan3D.mix(titanPose('IDLE'), titanPose('IDLE2'), 0.5+0.5*Math.sin(now*0.0019));
+  if(titanGuard>0.002) base=Titan3D.mix(base, titanPose('GUARD'), _smooth(Math.min(1,titanGuard)));
+  const dp=(now-titanDeployT)/420;
+  if(dp>=0 && dp<1) base=Titan3D.mix(base, titanPose('DEPLOY'), Math.sin(Math.pow(dp,0.6)*Math.PI));
+  // 휘두르기
+  const e=titanElapsed(now), swinging = swingT>0 && e<R.SWING_MS, u=swinging ? e/R.SWING_MS : -1, ui=R.IMPACT_MS/R.SWING_MS;
+  let P = swinging ? titanSwingPose(u, titanCombo, titanFrom, base) : base;
+  const calm = swinging ? 0.25 : 1, wk=now*0.0092;
+  P={ q:P.q, p:[ P.p[0] + (Math.sin(wk*0.5)*0.011*titanWalk + Math.sin(now*0.0011)*0.002)*calm - titanTurn*0.022,
+                 P.p[1] - (Math.abs(Math.sin(wk*0.5))*0.014*titanWalk)*calm - Math.abs(titanTurn)*0.006,
+                 P.p[2] + Math.sin(wk)*0.004*titanWalk*calm ] };
+  titanCur=P;
+  // 빛: 에너지 셀 3개는 방어막 충전량만큼 차례로 켜짐. 내려칠 때 타격면이 달아오름
+  const ch=abilCharge(now), pulse=0.86+0.14*Math.sin(now*0.005);
+  const strike = swinging ? Math.max(0, 1-Math.abs(u-ui)/0.16) : 0;
+  const boost = abilActive ? 0.55+0.2*Math.sin(now*0.03) : 0;
+  const cells=[0,1,2].map(i=>Math.max(0.07, Math.min(1, ch*3-i))*pulse + boost + strike*0.9);
+  const hot = swinging ? (u<ui ? Math.pow(Math.max(0,(u-0.2)/(ui-0.2)),2)*1.6 : Math.max(0,1.6-(u-ui)*5)) : 0;
+  const shieldLight = Math.max(titanGuard, (dp>=0&&dp<1) ? Math.sin(dp*Math.PI) : 0);
+  // 궤적: 지난 자세들을 다시 계산해 타격면이 지나온 자리를 띠로 그림 (망치 뒤에 깔림)
+  if(swinging && u>0.25 && u<0.66) drawTitanTrail(u, base);
+  const r=Titan3D.drawRig(ctx, P, { cells, hot, glow:0.8+0.2*pulse+boost*0.6+strike*0.8, shield:shieldLight,
+    charge: abilActive ? Math.max(0,(abilEnd-now)/hero.abilDur)*100 : ch*100 });
+  if(!r) return;
+  // 빛 번짐
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalCompositeOperation='lighter';
+  const s=r.scale;
+  r.cells.forEach((c,i)=>{ if(c) glowDot(c[0],c[1],s*0.018,'#3d9bff',Math.min(1,0.20*cells[i])); });
+  if(r.ring) glowDot(r.ring[0],r.ring[1],s*0.012,'#3d9bff',0.22);
+  if(r.face && hot>0.05) glowDot(r.face[0],r.face[1],s*0.05,'#58b4ff',Math.min(0.75,hot*0.4));
+  ctx.restore();
+  // 충격 효과: 타격이 들어간 순간 한 번
+  if(swinging && !titanFxDone && swingHitDone){
+    titanFxDone=true;
+    const f=r.face||[W/2,H*0.62], x=Math.max(W*0.12,Math.min(W*0.88,f[0])), y=Math.max(H*0.3,Math.min(H*0.9,f[1]));
+    titanRings.push({ x, y, t:now, hit:titanHit, s:Math.max(280,s) });
+    const n=titanHit?26:12, dir=titanCombo?1:-1;
+    for(let i=0;i<n;i++){ const a=-Math.PI/2+(Math.random()-0.5)*2.6+dir*0.35, v=(260+Math.random()*640)*(titanHit?1.15:0.8);
+      titanSparks.push({ x, y, vx:Math.cos(a)*v, vy:Math.sin(a)*v, life:260+Math.random()*340, max:600, hot:titanHit&&Math.random()<0.55 }); }
+  }
+  drawTitanFx(now, dt);
+}
+// 휘두르는 궤적: 타격면 위·아래 끝이 지나온 띠 (푸른 에너지 잔상)
+function drawTitanTrail(u, base){
+  const N=12, span=0.125, u0=Math.max(0.25,u-span), pts=[];
+  for(let i=0;i<=N;i++){
+    const uu=u0+(u-u0)*i/N, m=Titan3D.points(ctx, titanSwingPose(uu, titanCombo, titanFrom, base));
+    if(m.top && m.bottom && m.face) pts.push(m);
+  }
+  if(pts.length<2) return;
+  const fade=Math.min(1,(u-0.25)/0.06)*Math.max(0,Math.min(1,(0.66-u)/0.12));
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalCompositeOperation='lighter';
+  for(let i=0;i+1<pts.length;i++){
+    const a=pts[i], b=pts[i+1], k=(i+1)/pts.length;
+    ctx.fillStyle=`rgba(70,150,255,${(0.34*k*k*fade).toFixed(3)})`;
+    ctx.beginPath(); ctx.moveTo(a.top[0],a.top[1]); ctx.lineTo(b.top[0],b.top[1]); ctx.lineTo(b.bottom[0],b.bottom[1]); ctx.lineTo(a.bottom[0],a.bottom[1]); ctx.closePath(); ctx.fill();
+  }
+  // 밝은 가장자리 선
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(const key of ['top','face']){
+    for(let i=0;i+1<pts.length;i++){
+      const k=(i+1)/pts.length;
+      ctx.strokeStyle=`rgba(190,228,255,${(0.75*k*k*fade).toFixed(3)})`; ctx.lineWidth=(key==='face'?5:2.5)*k+0.5;
+      ctx.beginPath(); ctx.moveTo(pts[i][key][0],pts[i][key][1]); ctx.lineTo(pts[i+1][key][0],pts[i+1][key][1]); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+// 충격 고리·섬광·불티
+function drawTitanFx(now, dt){
+  if(!titanRings.length && !titanSparks.length) return;
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalCompositeOperation='lighter';
+  titanRings=titanRings.filter(g=>now-g.t<420);
+  for(const g of titanRings){
+    const f=(now-g.t)/420, ef=1-Math.pow(1-f,3), big=g.hit?1:0.62, R0=g.s*0.55*big;
+    // 섬광
+    if(f<0.3){ const a=(1-f/0.3)*(g.hit?0.85:0.45), rr=R0*(0.35+f*1.2);
+      const gr=ctx.createRadialGradient(g.x,g.y,0,g.x,g.y,rr);
+      gr.addColorStop(0,`rgba(255,255,255,${a})`); gr.addColorStop(0.35,`rgba(120,190,255,${a*0.7})`); gr.addColorStop(1,'rgba(60,140,255,0)');
+      ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(g.x,g.y,rr,0,7); ctx.fill(); }
+    // 퍼지는 충격 고리 2겹 (바닥에 누운 타원)
+    for(const [m,w,al] of [[1,9,0.8],[0.62,4,0.5]]){
+      ctx.strokeStyle=`rgba(120,195,255,${((1-f)*(1-f)*al).toFixed(3)})`; ctx.lineWidth=Math.max(1,w*(1-f));
+      ctx.beginPath(); ctx.ellipse(g.x,g.y,R0*(0.2+ef*1.25)*m,R0*(0.2+ef*1.25)*m*0.42,0,0,7); ctx.stroke();
+    }
+    // 방사형 균열 빛줄
+    if(f<0.5){ ctx.strokeStyle=`rgba(200,232,255,${(0.6*(1-f/0.5)).toFixed(3)})`; ctx.lineWidth=2;
+      for(let i=0;i<9;i++){ const a=i*0.698+g.t%1.7, r0=R0*0.12, r1=R0*(0.3+ef*0.55)*(0.6+((i*37)%10)/14);
+        ctx.beginPath(); ctx.moveTo(g.x+Math.cos(a)*r0,g.y+Math.sin(a)*r0*0.5); ctx.lineTo(g.x+Math.cos(a)*r1,g.y+Math.sin(a)*r1*0.5); ctx.stroke(); } }
+  }
+  const sdt=dt/1000;
+  for(const p of titanSparks){ p.vy+=1700*sdt; p.vx*=1-1.6*sdt; p.x+=p.vx*sdt; p.y+=p.vy*sdt; p.life-=dt; }
+  titanSparks=titanSparks.filter(p=>p.life>0);
+  ctx.lineCap='round';
+  for(const p of titanSparks){
+    const a=Math.min(1,p.life/220);
+    ctx.strokeStyle = p.hot ? `rgba(255,190,110,${a})` : `rgba(150,210,255,${a})`; ctx.lineWidth=p.hot?2.6:2;
+    ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x-p.vx*0.022,p.y-p.vy*0.022); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── (WebGL2가 없을 때 쓰는) 2D 망치 ─────────────────────────
 function drawHammer(now){
   const px=20, py=-75;           // 피벗 = 손 위치 (화면 하단 중앙)
   const L=255;                   // 자루 길이
@@ -2039,7 +2231,7 @@ function loop(t){
     gameTime += dt;
     if(firing && hero.fireMode!=='semi') attack(); // 꾹 누르면 자동 연사/연속 타격
     // 근접 임팩트 순간에 타격 적용 (무기에 따라 타이밍 다름)
-    const _impactMs = hero.weapon==='katana' ? 200 : SWING_IMPACT;
+    const _impactMs = hero.weapon==='katana' ? 200 : titanRigOn() ? TITAN_RIG.IMPACT_MS : SWING_IMPACT;
     if(!swingHitDone && t-swingT>=_impactMs){ applyMelee(); swingHitDone=true; }
     updatePlayer(dt);
     updateEnemies(dt,t);
@@ -2057,6 +2249,7 @@ function loop(t){
   // 반동·흔들림 감쇠 (시간 기반) — 반동은 클수록 빨리 돌아옴
   recoilAmt = Math.max(0, recoilAmt - dt*(0.0035 + recoilAmt*0.006));
   shake = Math.max(0, shake - dt/26);
+  meleeKick = Math.max(0, meleeKick - dt*(0.02 + meleeKick*0.012));
   render();
   updateHUD(t);
   if(paused) drawPauseOverlay();
