@@ -35,7 +35,7 @@ Enemies, missiles, and explosions are depth-sorted and rendered as camera-facing
 Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, animated using easing helpers (`_easeIn`, `_easeOut`, `_lerp`):
 - **Assault Rifle "RAZOR-FX"** (Spark) — shown side-on with an under-barrel missile pod, holographic sight and orange glow lines. The magazine window shows remaining ammo, and the pod's three missiles slide out as the missile skill recharges (a "READY" hologram appears when it is ready). Recoil kick, muzzle flash.
 - **Sniper Rifle "LUX-VALOR"** (Medica) — white/blue body with a glass tube of swirling heal fluid and a gold muzzle with a glowing crystal. Bolt-action animation, ADS scope overlay (right-click).
-- **Hammer "SENTINEL MAUL"** (Titan) — spiked steel head with four glowing blue energy cells. Overhead vertical slam with motion-blur arc; the Barrier skill is drawn as a blue hexagon shield.
+- **Hammer "SENTINEL MAUL"** (Titan) — a **first-person 3D rig built entirely in code** (`titan3d.js`, no model files): spiked steel head, engraved nameplate, three glowing energy cells, and two armored gauntlets whose fingers wrap the handle. The hands stay on the grip while forearms and upper arms follow by two-bone IK. Two alternating swings (diagonal overhead smash → horizontal backhand) with an energy trail, impact ring, sparks and a short hit-stop. The energy cells and the wrist gauge show Barrier charge. The Barrier skill is a curved hexagon shield that unfolds cell by cell, ripples where enemy shots land and scatters when it ends.
 - **Katana "RISING DRAGON"** (Kage) — a **real 3D model** (`assets/models/kage_blade.glb`, made by the author with Meshy AI) drawn by `kage3d.js`: metal shading from the model's color / metal-roughness / normal textures, the cyan lines glow on their own and get brighter during a cut, and a flash of light runs along the blade as it swings. If WebGL2 is unavailable it falls back to the hand-drawn 2D katana (blade with a cyan glow line and a black-and-gold tsuba). Kage's two arms holding the sword are also a **3D model** (`assets/models/kage_arms.glb`, made by the author with Meshy AI): both armored arms grip the handle with two fists, exactly as in the model; the model's own sword was cut out and the original RISING DRAGON katana is fitted into the fists. It is drawn in true first-person perspective (closer = bigger, things behind the eye are clipped), and the arms and sword move as one body around the shoulders, so the hands and blade sweep in arcs while the arm ends stay out of view. Attacks: normal = raise over the right shoulder, then a diagonal cut down to the lower left (袈裟斬り); Iai (E) = drop to the lower left and a fast rising cut to the upper right (逆袈裟). The edge is turned toward the cutting direction in each pose. If only the arm model fails to load, the 3D katana is drawn with shaded 2D gloves. Idle is a guard stance with the tip aimed at the screen centre (edge down). The swing moves the hands and the blade together (guard → 上段 → 袈裟斬り) so the edge leads the cut, with a cyan trail that follows the actual path of the tip.
 
 ### Firing Feedback
@@ -108,6 +108,7 @@ OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
 ├── game.js           # Complete game engine (~2,100 lines, single file)
+├── titan3d.js        # Titan 3D hammer + gauntlet arms + hex shield (WebGL2, shapes built in code, two-bone IK)
 ├── kage3d.js         # Small WebGL2 renderer for Kage's 3D katana and arms (GLB loader + metal shader + first-person perspective)
 ├── assets/models/
 │   ├── kage_blade.glb     # Kage's katana 3D model (textures resized to 1024px)
@@ -300,7 +301,7 @@ function applyMelee() {
 ```
 
 **Why this approach:**
-- Melee damage is not applied when the swing animation begins (`startSwing`) but at a specific keyframe: `SWING_IMPACT` ms (210 ms) into the animation for the hammer, 200 ms for the katana. This ties the damage window to the visual moment of contact, making the feel accurate.
+- Melee damage is not applied when the swing animation begins (`startSwing`) but at a specific keyframe: `TITAN_RIG.IMPACT_MS` (282 ms) into the animation for the 3D hammer (`SWING_IMPACT`, 210 ms, for the 2D fallback hammer), 200 ms for the katana. This ties the damage window to the visual moment of contact, making the feel accurate.
 - `hero.meleeArc` (radians from centre) is unique per hero. Titan has `0.7` rad (~40°), Kage has `0.88` rad (~50°) — wider arc for the slashing katana vs. the focused hammer strike.
 - Normalising the angle into `(−π, π)` before comparing `Math.abs(ang) > arc` avoids the angle-wrapping bug where an enemy directly behind the player (angle ≈ ±π) could be wrongly included.
 
@@ -376,6 +377,8 @@ const _lerp    = (a, b, u) => a + (b-a)*u;
 ### 8. Hammer Overhead Slam Animation
 
 **Where:** `drawHammer(now)`
+
+> This section describes the **2D fallback hammer**, used only when WebGL2 is unavailable. Normally Titan is drawn by `drawHammerRig(now)` + `titan3d.js`: poses are listed in `TITAN_RIG` (grip position, handle direction, strike-face direction) and blended with quaternion slerp.
 
 ```js
 // Angle convention: a=0 → head points straight up

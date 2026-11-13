@@ -35,7 +35,7 @@
 각 영웅의 무기는 `ctx.translate` / `ctx.rotate`로 코드에서 직접 그리며, 이징 함수(`_easeIn`, `_easeOut`, `_lerp`)로 움직입니다.
 - **돌격소총 "RAZOR-FX"** (Spark) — 옆모습이 보이게 들고 있으며, 총열 아래 미사일 포드, 홀로그램 조준경, 주황 발광 라인이 있습니다. 탄창 창에 남은 탄이 표시되고, 미사일 스킬이 충전될수록 포드의 미사일 3발이 밀려 나옵니다(준비되면 "READY" 홀로그램 표시). 반동, 총구 화염.
 - **저격소총 "LUX-VALOR"** (Medica) — 흰·파랑 몸체에 회복약이 소용돌이치는 유리관, 빛나는 결정이 달린 금장 총구. 볼트액션 애니메이션, 조준(ADS) 스코프 화면 (우클릭).
-- **해머 "SENTINEL MAUL"** (Titan) — 가시 달린 강철 머리에 파랗게 빛나는 에너지 셀 4개. 머리 위에서 수직으로 내리치기 + 모션 블러 호. 방벽 스킬은 파란 육각형 보호막으로 표시됩니다.
+- **해머 "SENTINEL MAUL"** (Titan) — 모델 파일 없이 **코드로 직접 빚은 1인칭 3D 장비**(`titan3d.js`). 가시 달린 강철 머리, 글자가 새겨진 명판, 파랗게 빛나는 에너지 셀 3개, 손가락이 자루를 감아 쥔 장갑 두 손. 손은 자루에 붙어 있고 팔뚝·위팔은 관절 계산(2관절 IK)으로 따라옴. 휘두르기는 두 가지가 번갈아 나옴(대각선 내려찍기 → 수평 후려치기) + 에너지 궤적·충격 고리·불티·맞혔을 때 짧은 멈춤. 에너지 셀과 손목 계기판이 방벽 충전량을 보여 줌. 방벽 스킬은 굽은 육각 벌집 방어막 — 칸칸이 펼쳐지고, 총알이 맞은 자리에 물결이 퍼지고, 끝나면 흩어지며 꺼짐.
 - **카타나 "RISING DRAGON"** (Kage) — 직접 Meshy AI로 만든 **진짜 3D 모델**(`assets/models/kage_blade.glb`)을 `kage3d.js`가 그림. 모델의 색·금속/거칠기·노멀 텍스처로 금속 질감을 내고, 하늘색 줄은 스스로 빛나며 벨 때 더 밝아지고, 휘두를 때 날을 따라 빛이 한 번 훑고 지나감. WebGL2를 쓸 수 없으면 직접 그린 2D 칼(하늘색 발광선 칼날, 검정·금색 쓰바)로 자동 전환. 칼을 쥔 두 팔도 직접 Meshy AI로 만든 **3D 모델**(`assets/models/kage_arms.glb`): 갑옷 두 팔이 두 주먹으로 자루를 쥔 모델 자세를 그대로 쓰고, 모델 속 칼은 잘라낸 뒤 원래 검(RISING DRAGON)을 주먹 사이에 끼움. 진짜 1인칭 원근(가까울수록 크게, 눈 뒤는 잘림)으로 그리며, 팔과 칼은 한 몸으로 어깨를 축으로 움직여 손과 칼날이 호를 그리고 팔 끝은 화면에 안 보임. 공격: 일반 = 오른쪽 어깨 위로 들었다가 왼쪽 아래로 사선 베기(袈裟斬り), 거합(E) = 왼쪽 아래로 내렸다가 오른쪽 위로 빠르게 올려베기(逆袈裟). 자세마다 날을 베는 방향으로 돌림. 팔 모델만 못 읽으면 3D 칼 + 명암 2D 장갑으로 그림. 평소엔 칼끝이 화면 가운데를 향한 겨눔 자세(날은 아래). 휘두를 때는 손과 칼이 함께 움직여(겨눔 → 上段 → 袈裟斬り) 칼날이 앞장서서 베고, 칼끝이 실제로 지나간 자리를 따라 하늘색 궤적이 남음.
 
 ### 사격 연출
@@ -110,6 +110,7 @@ OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
 ├── game.js           # Complete game engine (~2,100 lines, single file)
+├── titan3d.js        # Titan 3D hammer + gauntlet arms + hex shield (WebGL2, shapes built in code)
 ├── kage3d.js         # Kage 3D katana + arms renderer (WebGL2, first-person perspective)
 ├── assets/models/
 │   ├── kage_blade.glb     # Kage katana 3D model
@@ -122,6 +123,7 @@ OVER_SHOT/
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
 - `game.js` — 게임 엔진 전체 (약 2,100줄, 파일 하나)
+- `titan3d.js` — 타이탄의 3D 망치·장갑 두 팔·육각 방어막을 그리는 WebGL2 표시기 (형태를 코드로 직접 빚음, 2관절 팔 계산, 외부 라이브러리 없음)
 - `kage3d.js` — 카게의 3D 칼과 두 팔을 그리는 작은 WebGL2 표시기 (GLB 읽기 + 금속 셰이더 + 1인칭 원근, 외부 라이브러리 없음)
 - `assets/models/kage_blade.glb` — 카게 칼 3D 모델 (텍스처를 2048px에서 1024px로 줄임)
 - `assets/models/kage_blade.glb.js` — 같은 모델을 base64로 담은 파일. 서버 없이 `index.html`을 바로 열면(file://) 이것을 읽음
@@ -387,6 +389,8 @@ const _lerp    = (a, b, u) => a + (b-a)*u;
 ### 8. 해머 내리치기 애니메이션
 
 **위치:** `drawHammer(now)`
+
+> 이 절은 WebGL2가 없을 때만 쓰는 **예비용 2D 망치** 설명입니다. 평소에는 `drawHammerRig(now)` + `titan3d.js`가 타이탄을 그립니다. 자세는 `TITAN_RIG`에 적혀 있고(기준점 위치, 자루 방향, 타격면 방향) 사원수 보간으로 부드럽게 이어집니다.
 
 ```js
 // Angle convention: a=0 → head points straight up
