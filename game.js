@@ -131,7 +131,7 @@ function startGame(){
   recoilAmt=0; shake=0; swingHitDone=true;
   abilActive=false; abilReady=true; abilCdEnd=0;
   adsActive=false; iaiFlash=0; iaiPending=false; iaiHit=false; swingT=0; kageReset();
-  barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset();
+  barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset(); gunSway.t=0;
   fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true; aimBlend=0;
   el('abilName').textContent = hero.ability + ' [E]';
   el('ammoVal').textContent = hero.fireMode==='melee' ? '∞' : ammo;
@@ -887,6 +887,7 @@ function drawHand(hx,hy,r, glove='#11151f', top='#1c2333', ring){
 function drawWeapon(){
   const now=performance.now();
   if(titanRigOn()){ drawHammerRig(now); return; }   // 타이탄: 3D 망치 + 두 팔 (흔들림도 3D로 직접 계산)
+  if(gunRigOn()){ drawGunRig(now); return; }         // 스파크·메디카: 3D 총 + 두 팔
   const moving = keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
   const gun = hero.weapon==='rifle' || hero.weapon==='sniper';
   const amp = (moving?1:0.4) * (gun ? 1-0.65*_smooth(aimBlend) : 1);   // 겨누는 중엔 흔들림이 줄어듦
@@ -2005,6 +2006,99 @@ function drawIaiEffect(now){
 
 // 망치 SENTINEL MAUL (탱커) — 위에서 아래로 크게 내려치는 오버헤드 슬램
 // 디자인: 모서리 깎인 짙은 강철 머리 + 윗면 가시, 파랗게 빛나는 에너지 셀 4개, 파랑·주황 장갑
+// ── 3D 총 (스파크 RAZOR-FX · 메디카 LUX-VALOR) — 1인칭 ───────────
+//  guns3d.js가 총·탄창·두 팔을 3D로 그린다. 여기서는 자세(내려 든 자세·겨눔)와 반동·재장전·노리쇠·화염 효과를 정한다
+//  자세 = [총 원점 위치, 총구가 향하는 방향, 총 윗면이 향하는 방향]  (눈이 원점, x 오른쪽, y 위, -z 앞, 단위 미터)
+if(typeof Guns3D!=='undefined') Guns3D.load();
+const GUN_RIG = {
+  rifle:  { LOW:[[0.150,-0.150,-0.30],[-0.20,-0.07,-1],[0.14,1,0]],     // 내려 든 자세: 오른쪽 아래에서 총구가 가운데 아래를 향함
+            AIM:[[0.000,-0.113,-0.19],[0,0,-1],[0,1,0]] },                // 겨눔: 조준경 창이 화면 가운데에 옴
+  sniper: { LOW:[[0.165,-0.170,-0.34],[-0.22,-0.04,-1],[0.14,1,0]],
+            AIM:[[0.080,-0.158,-0.29],[-0.045,0.012,-1],[0.04,1,0]] },    // 견착: 조준경이 조준점 오른쪽 아래 (우클릭하면 스코프 화면)
+};
+const gunSway = { t:0, walk:0, turn:0, ang:0 };
+function gunRigOn(){ return !!hero && (hero.weapon==='rifle'||hero.weapon==='sniper') && typeof Guns3D!=='undefined' && Guns3D.ready; }
+function drawGunRig(now){
+  const kind=hero.weapon, G=GUN_RIG[kind], sn=kind==='sniper';
+  const dt=Math.max(1,Math.min(50, gunSway.t ? now-gunSway.t : 16)); gunSway.t=now;
+  const moving = !paused && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']);
+  gunSway.walk += ((moving?1:0)-gunSway.walk)*Math.min(1,dt/140);
+  let dAng=player.ang-gunSway.ang; gunSway.ang=player.ang;
+  while(dAng>Math.PI) dAng-=2*Math.PI; while(dAng<-Math.PI) dAng+=2*Math.PI;
+  gunSway.turn += (Math.max(-1,Math.min(1,dAng/(dt*0.004)))-gunSway.turn)*Math.min(1,dt/110);
+  const A=_smooth(Math.max(0,Math.min(1,aimBlend))), arc=Math.sin(A*Math.PI);
+  const L3=(a,b,u)=>[_lerp(a[0],b[0],u),_lerp(a[1],b[1],u),_lerp(a[2],b[2],u)];
+  const p=L3(G.LOW[0],G.AIM[0],A), fwd=L3(G.LOW[1],G.AIM[1],A), up=L3(G.LOW[2],G.AIM[2],A);
+  p[1]+=arc*0.018; up[0]+=arc*0.05;                                   // 올리는 도중 살짝 위로 휘고 기울었다가 바로 섬
+  // 몸 움직임: 숨쉬기·걸을 때 출렁임·시점 돌릴 때 늦게 따라옴 (겨누면 줄어듦)
+  const calm=1-0.75*A, wk=now*0.0092;
+  p[0]+=(Math.sin(wk*0.5)*0.009*gunSway.walk+Math.sin(now*0.0011)*0.0015)*calm - gunSway.turn*0.016*calm;
+  p[1]+=(-Math.abs(Math.sin(wk*0.5))*0.011*gunSway.walk+Math.sin(now*0.0019)*0.0022)*calm;
+  fwd[0]-=gunSway.turn*0.05*calm;
+  // 반동: 뒤로 밀리고 총구가 들림, 좌우로 조금 튐
+  const k=recoilAmt;
+  p[2]+=k*(sn?0.034:0.014); p[1]+=k*(sn?0.010:0.003); fwd[1]+=k*(sn?0.075:0.022); fwd[0]+=recoilJit*k*0.35;
+  // 재장전: 총을 기울여 세우고, 왼손이 탄창을 빼서 새 탄창을 끼움
+  const R=reloadAnim(now);
+  fwd[1]+=R.tilt*0.26; up[0]-=R.tilt*0.55; p[0]-=R.tilt*0.045; p[1]+=R.tilt*0.055;
+  const mt=now-muzzle, lt=now-missileFireT, charge=abilCharge(now);
+  // 저격총 노리쇠: 쏜 뒤 오른손이 손잡이를 들어 당겼다 밀어 넣음 (당겨진 순간 탄피가 튐)
+  let pull=R.ch, boltHand=0;
+  if(sn){
+    const bu=(mt>200 && mt<800)?(mt-200)/600:-1;
+    if(bu>=0){ pull=bu<0.45?_smooth(bu/0.45):1-_smooth((bu-0.45)/0.55); boltHand=_smooth(Math.min(1,bu/0.14, (1-bu)/0.14));
+      if(bu>=0.45 && !sniperEjected){ sniperEjected=true; spawnCasing(true); } }
+  }
+  const flash = mt<(sn?110:70) ? 1-mt/(sn?110:70) : 0;
+  const pulse=0.85+0.15*Math.sin(now*0.005);
+  const heal = sn && abilActive ? 0.9+0.3*Math.sin(now*0.02) : 0;
+  const E = sn ? [1, 0.8*pulse+heal+flash*1.2, 0.7+flash*2.5+heal*0.5, 0.8+heal, 1, 0.8+heal]
+               : [1, pulse+flash*0.8, 0.2+1.1*charge+(lt<160?2:0), mt<60?2.2:1, 1, pulse];
+  const front = sn ? [0.9*flash*0.9,1.5*flash*0.9,2.2*flash*0.9] : [2.6*flash*1.6,1.5*flash*1.6,0.55*flash*1.6];
+  const P=FP3D.aim(p,fwd,up);
+  const r=Guns3D.draw(ctx, kind, P, { magDy:R.magDy/170*0.27, magShow:R.magA>0.05, hand:R.hand, pull, boltHand,
+    charge, podKick: lt<260 ? (1-lt/260)*0.02 : 0, E, front,
+    ammo: (R.rp>=0.62||!reloading) ? (reloading?maxammo:ammo) : ammo, maxammo });
+  if(!r) return;
+  const pt=q=>q?{x:q[0],y:q[1]}:null;
+  gunFx.muzzle=pt(r.muzzle)||{x:W/2,y:H*0.6}; gunFx.eject=pt(r.eject); gunFx.pod=pt(r.pod);
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  // 총구 화염: 앞으로 뻗는 불꽃 + 주변을 밝히는 빛
+  if(flash>0 && r.muzzle){
+    const [mx,my]=r.muzzle, sc=Math.max(120,r.scale)*(sn?0.20:0.16)*(1-0.4*A), v=Math.floor(muzzle)%3;
+    ctx.globalCompositeOperation='lighter';
+    const c0=sn?'190,240,255':'255,200,110', c1=sn?'90,190,255':'255,140,40';
+    const lg=ctx.createRadialGradient(mx,my,0,mx,my,sc*2.6);
+    lg.addColorStop(0,`rgba(${c0},${0.55*flash})`); lg.addColorStop(1,`rgba(${c1},0)`);
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(mx,my,sc*2.6,0,7); ctx.fill();
+    ctx.translate(mx,my); ctx.rotate(v*0.7);
+    ctx.fillStyle=`rgba(${c0},${0.9*flash})`; ctx.beginPath();
+    for(let i=0;i<10;i++){ const an=i/10*Math.PI*2, rr=(i%2?0.38:1)*sc*(0.6+0.4*flash)*(1+0.2*v); ctx[i?'lineTo':'moveTo'](Math.cos(an)*rr,Math.sin(an)*rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle=`rgba(255,252,235,${flash})`; ctx.beginPath(); ctx.arc(0,0,sc*0.3,0,7); ctx.fill();
+    ctx.setTransform(1,0,0,1,0,0); ctx.globalCompositeOperation='source-over';
+  }
+  if(!sn){
+    // 미사일 발사 화염 + 떠 있는 홀로그램 표시 (READY / 충전 % / LAUNCH)
+    if(lt<160 && r.pod){ ctx.globalCompositeOperation='lighter'; glowDot(r.pod[0],r.pod[1],(1-lt/160)*28+6,'#ff8a2a',1-lt/160); ctx.globalCompositeOperation='source-over'; }
+    if(r.sight && A<0.5){ ctx.globalAlpha=1-A*2; drawHoloTag(r.sight[0]-42, r.sight[1]-Math.max(90,r.scale*0.14), now, charge, lt, '#ff8a2a'); ctx.globalAlpha=1; }
+    // 홀로그램 조준점: 겨누면 조준경 창 안에 떠오름 (적을 겨누면 붉게)
+    if(A>0.55 && r.sight){
+      const a=(A-0.55)/0.45, cx=W/2, cy=H/2, col=aimOnTarget?'255,70,60':'255,150,60', rr=Math.max(14,H*0.026);
+      ctx.strokeStyle=`rgba(${col},${0.9*a})`; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7); ctx.stroke();
+      for(let i=0;i<4;i++){ const an=i*Math.PI/2; ctx.beginPath(); ctx.moveTo(cx+Math.cos(an)*rr,cy+Math.sin(an)*rr); ctx.lineTo(cx+Math.cos(an)*rr*1.45,cy+Math.sin(an)*rr*1.45); ctx.stroke(); }
+      ctx.fillStyle=`rgba(${col},${a})`; ctx.beginPath(); ctx.arc(cx,cy,2.4,0,7); ctx.fill();
+    }
+  } else if(heal>0 && r.muzzle){
+    // 회복 가동 중: 총에서 하늘색 빛 알갱이가 피어오름
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<9;i++){ const ph=(now*0.0006+i*0.137)%1, x=W*(0.56+0.36*((i*0.618)%1)), y=H*(0.98-ph*0.5);
+      glowDot(x+Math.sin(now*0.003+i)*8, y, 2.2+2*(1-ph), '#5fe6ff', 0.55*(1-ph)); }
+    ctx.globalCompositeOperation='source-over';
+  }
+  ctx.restore();
+}
+
 // ── 전투 망치 SENTINEL MAUL (타이탄) — 3D 1인칭 ───────────────
 //  titan3d.js가 망치·장갑 두 팔을 3D로 그린다. 여기서는 자세(대기·휘두르기·방어)와 빛·궤적·충격 효과를 정한다
 //  자세 한 줄 = [기준점 위치 x,y,z,  자루 방향 x,y,z,  타격면이 향하는 방향 x,y,z]  (눈이 원점, x 오른쪽, y 위, -z 앞, 단위 미터)
@@ -2058,7 +2152,7 @@ function titanSwingPose(u, combo, from, base){
   const x=(u-0.60)/0.40; return Titan3D.mix(THRU, base, x*x*x*(x*(x*6-15)+10));                       // 천천히 대기 자세로
 }
 function drawHammerRig(now){
-  const R=TITAN_RIG, dt=Math.min(50, titanPrevT ? now-titanPrevT : 16); titanPrevT=now;
+  const R=TITAN_RIG, dt=Math.max(1,Math.min(50, titanPrevT ? now-titanPrevT : 16)); titanPrevT=now;
   // 몸 움직임: 걸을 때 출렁임, 시점을 돌리면 무기가 살짝 늦게 따라옴
   const moving = !paused && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']);
   titanWalk += ((moving?1:0)-titanWalk)*Math.min(1,dt/140);
@@ -2303,7 +2397,7 @@ function updateHUD(now){
   // 조준 표시 (사격 영웅): 크로스헤어가 적을 겨누면 빨갛게
   const cross = document.querySelector('.cross');
   aimOnTarget = hero.fireMode!=='melee' && !paused && !!rayHitEnemy(player.x,player.y,player.ang);
-  const sightUp = (hero.weapon==='rifle' || hero.weapon==='sniper') && aimBlend>0.7;   // 조준경으로 겨누는 중
+  const sightUp = (hero.weapon==='rifle' || (hero.weapon==='sniper' && !gunRigOn())) && aimBlend>0.7;   // 조준경으로 겨누는 중 (조준경 안의 점이 조준점을 대신함)
   if((adsActive && hero && hero.weapon==='sniper') || sightUp){
     cross.classList.add('hide');  // 스코프 사용 중엔 CSS 크로스헤어 숨김
   } else {
