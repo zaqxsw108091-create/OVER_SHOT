@@ -4,7 +4,7 @@
 
 **한국어:** [README.ko.md](README.ko.md)
 
-> A first-person shooter built entirely with vanilla JavaScript and HTML5 Canvas (plus a small hand-written WebGL2 renderer for Kage's 3D katana) — no frameworks, no build tools, just open `index.html` and play.
+> A first-person shooter built entirely with vanilla JavaScript, HTML5 Canvas and hand-written WebGL2 (first-person 3D weapons and hands for every hero, plus a selectable 3D city map) — no frameworks, no build tools, no three.js. Open `index.html` and play.
 
 ---
 
@@ -13,7 +13,7 @@
 | Layer | Technology |
 |---|---|
 | Language | Vanilla JavaScript (ES6+) |
-| Rendering | HTML5 Canvas 2D API · WebGL2 (only for Kage's 3D katana model, hand-written — no three.js) |
+| Rendering | HTML5 Canvas 2D API (raycast world, HUD, effects) · hand-written WebGL2 (3D weapons, hands, shield, 3D map, enemy robots — no three.js) |
 | Styling | Pure CSS3 |
 | Build Tools | **None** — no bundler, no framework, no npm packages (the only external request is the optional Google Fonts stylesheet in `styles.css`; the game still works without it) |
 | Storage | Browser `localStorage` (per-hero best records) |
@@ -21,6 +21,11 @@
 ---
 
 ## Core Implementation
+
+### Maps
+Two maps can be picked on the hero-select screen (the choice is remembered):
+- **Classic Maze (2.5D)** — the original 16 × 16 raycast maze.
+- **Neo Busan (3D prototype)** — a 24 × 22 neon street drawn in real 3D by `world3d.js`: buildings of different heights with lit windows, Korean neon signs, street lamps, pillars, 16 point lights, wet-asphalt reflections, a dusk sky with a distant skyline, and fog. Crates and barriers are **low cover**: they block movement but you can see and shoot over them. Enemies are 3D robots that are depth-sorted against the city. Game rules (movement, collision, hit tests) stay on the 2D grid, so both maps share all gameplay code. Without WebGL2 the same map falls back to the raycaster.
 
 ### Raycasting Engine
 A raycasting renderer inspired by early 90s FPS games. Each ray is marched forward in fixed 0.012-tile steps until it hits a wall tile (simple ray marching — not the DDA grid-traversal algorithm).
@@ -33,10 +38,10 @@ Enemies, missiles, and explosions are depth-sorted and rendered as camera-facing
 
 ### Weapon View Models
 Each hero's weapon is drawn procedurally with `ctx.translate` / `ctx.rotate`, animated using easing helpers (`_easeIn`, `_easeOut`, `_lerp`):
-- **Assault Rifle "RAZOR-FX"** (Spark) — shown side-on with an under-barrel missile pod, holographic sight and orange glow lines. The magazine window shows remaining ammo, and the pod's three missiles slide out as the missile skill recharges (a "READY" hologram appears when it is ready). Recoil kick, muzzle flash.
-- **Sniper Rifle "LUX-VALOR"** (Medica) — white/blue body with a glass tube of swirling heal fluid and a gold muzzle with a glowing crystal. Bolt-action animation, ADS scope overlay (right-click).
+- **Assault Rifle "RAZOR-FX"** (Spark) — **first-person 3D** (`guns3d.js`, built in code): black body with orange glow lines, holographic sight you actually look through when aiming, under-barrel pod with three missiles, and a magazine window that shows the live ammo count. Low-ready → aimed pose, recoil, muzzle flash that lights the gun, and a reload where the left hand pulls the magazine and seats a new one.
+- **Sniper Rifle "LUX-VALOR"** (Medica) — **first-person 3D**: white/blue body, glowing vials of restorative agent, gold muzzle with a cyan crystal, scope with a side display. After each shot the right hand works the bolt and the casing flies; right-click still opens the full scope view. The vials flare while the Heal skill runs.
 - **Hammer "SENTINEL MAUL"** (Titan) — a **first-person 3D rig built entirely in code** (`titan3d.js`, no model files): spiked steel head, engraved nameplate, three glowing energy cells, and two armored gauntlets whose fingers wrap the handle. The hands stay on the grip while forearms and upper arms follow by two-bone IK. Two alternating swings (diagonal overhead smash → horizontal backhand) with an energy trail, impact ring, sparks and a short hit-stop. The energy cells and the wrist gauge show Barrier charge. The Barrier skill is a curved hexagon shield that unfolds cell by cell, ripples where enemy shots land and scatters when it ends.
-- **Katana "RISING DRAGON"** (Kage) — a **real 3D model** (`assets/models/kage_blade.glb`, made by the author with Meshy AI) drawn by `kage3d.js`: metal shading from the model's color / metal-roughness / normal textures, the cyan lines glow on their own and get brighter during a cut, and a flash of light runs along the blade as it swings. If WebGL2 is unavailable it falls back to the hand-drawn 2D katana (blade with a cyan glow line and a black-and-gold tsuba). Kage's two arms holding the sword are also a **3D model** (`assets/models/kage_arms.glb`, made by the author with Meshy AI): both armored arms grip the handle with two fists, exactly as in the model; the model's own sword was cut out and the original RISING DRAGON katana is fitted into the fists. It is drawn in true first-person perspective (closer = bigger, things behind the eye are clipped), and the arms and sword move as one body around the shoulders, so the hands and blade sweep in arcs while the arm ends stay out of view. Attacks: normal = raise over the right shoulder, then a diagonal cut down to the lower left (袈裟斬り); Iai (E) = drop to the lower left and a fast rising cut to the upper right (逆袈裟). The edge is turned toward the cutting direction in each pose. If only the arm model fails to load, the 3D katana is drawn with shaded 2D gloves. Idle is a guard stance with the tip aimed at the screen centre (edge down). The swing moves the hands and the blade together (guard → 上段 → 袈裟斬り) so the edge leads the cut, with a cyan trail that follows the actual path of the tip.
+- **Katana "RISING DRAGON"** (Kage) — a **real 3D model** (`assets/models/kage_blade.glb` + `kage_arms.glb`, made by the author with Meshy AI) drawn by `kage3d.js`. The textures are repainted as samurai gear: black urushi-lacquer armor with indigo plates and gold fittings, and a polished blade whose **hamon** (wavy temper line), frosted edge and ridge line are drawn in the shader. Attacks follow kenjutsu: a three-cut chain (kesagiri → gyaku-kesa → shomen) from a centered chudan guard, and the Iai skill is a full sequence — hip stance, draw cut with a forward lunge, overhead cut, chiburi, back to guard — with focus bars, slash scars and falling petals.
 
 ### Firing Feedback
 - Gun stance: when not shooting, the rifle and sniper are held in the lower right of the screen with the muzzle angled toward the center, like a classic first-person view model (the left gloved hand supports the handguard from below; the barrel side is drawn slightly foreshortened for depth). Pressing fire brings the gun to the **center of the screen and you look through its sight from behind** (aim down sights): the rifle's holographic sight window and the sniper's scope eyepiece sit exactly on the crosshair, the reticle turns red on an enemy, and the HUD crosshair is hidden. The side view slides in and fades out while the centered view rises from below (about 0.15 s, smoothstep); about 0.65 s after the last shot (or when the right button is released) the gun returns to the held pose. Holding the right mouse button also brings up this centered sight view without firing. Sway is reduced while aiming.
@@ -107,7 +112,10 @@ open index.html
 OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
-├── game.js           # Complete game engine (~2,100 lines, single file)
+├── game.js           # Game logic, 2D rendering, poses and effects (~2,600 lines)
+├── fp3d.js           # Shared first-person 3D engine: shape builder, PBR shader, gloved hands, two-bone IK arms
+├── guns3d.js         # Spark rifle RAZOR-FX + Medica sniper LUX-VALOR (3D, built in code)
+├── world3d.js        # 3D map renderer: neon city, point lights, wet-road reflections, sky, 3D enemy robots
 ├── titan3d.js        # Titan 3D hammer + gauntlet arms + hex shield (WebGL2, shapes built in code, two-bone IK)
 ├── kage3d.js         # Small WebGL2 renderer for Kage's 3D katana and arms (GLB loader + metal shader + first-person perspective)
 ├── assets/models/

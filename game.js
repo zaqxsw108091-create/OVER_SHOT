@@ -27,27 +27,66 @@ const HEROES = [
 ];
 
 // ---------- 맵 (1=벽, 0=빈칸) ----------
-const MAP = [
-  "1111111111111111",
-  "1000000001000001",
-  "1011110001011101",
-  "1010000000000101",
-  "1010111101110101",
-  "1000100000010001",
-  "1110100110010111",
-  "1000000000000001",
-  "1011001111001101",
-  "1010000000000101",
-  "1010110001101101",
-  "1000010000100001",
-  "1111010101011111",
-  "1000000000000001",
-  "1011111011111101",
-  "1111111111111111",
-].map(r=>r.split('').map(Number));
-const MAP_H = MAP.length, MAP_W = MAP[0].length;
-function isWall(x,y){ const mx=Math.floor(x),my=Math.floor(y);
-  if(mx<0||my<0||mx>=MAP_W||my>=MAP_H) return true; return MAP[my][mx]===1; }
+// 맵 목록. 글자 격자: '.' 길, '#' 벽·건물, 그 밖은 3D 맵 전용 — 'B' 낮은 구조물, 'p' 기둥, 'c' 상자 더미, 'b' 방호벽
+//  게임 판정용 숫자 격자로 바꿔 씀: 0 = 길, 1 = 시야·이동을 모두 막음, 2 = 낮은 엄폐물(이동만 막고 그 너머로 보고 쏠 수 있음)
+const MAPS = [
+  { id:'classic', name:'클래식 미로', tag:'2.5D', desc:'레이캐스팅으로 그리는 원래 미로. 좁은 복도에서 벌어지는 근접전.',
+    rows:[
+      "################",
+      "#........#.....#",
+      "#.####...#.###.#",
+      "#.#..........#.#",
+      "#.#.####.###.#.#",
+      "#...#......#...#",
+      "###.#..##..#.###",
+      "#..............#",
+      "#.##..####..##.#",
+      "#.#..........#.#",
+      "#.#.##...##.##.#",
+      "#....#....#....#",
+      "####.#.#.#.#####",
+      "#..............#",
+      "#.#####.######.#",
+      "################" ] },
+  { id:'busan', name:'네오 부산', tag:'3D 시안', is3d:true, desc:'네온 간판이 빛나는 노을 진 거리. 높낮이가 다른 건물과 낮은 엄폐물이 있는 넓은 전장.',
+    rows:[
+      "########################",
+      "#.......#......#.......#",
+      "#.......#......#..cc...#",
+      "#..p..........p........#",
+      "#..........bb..........#",
+      "#####..##......##..#####",
+      "#......#...BB...#......#",
+      "#..c...#...BB...#...c..#",
+      "#..c...................#",
+      "#..........p..p........#",
+      "#......#........#......#",
+      "###..###...cc...###..###",
+      "#......#........#......#",
+      "#..b.......p..p.....b..#",
+      "#..b...................#",
+      "#......#...BB...#......#",
+      "#####..##..BB..##..#####",
+      "#......................#",
+      "#..p......bb......p....#",
+      "#.......#......#...cc..#",
+      "#.......#......#.......#",
+      "########################" ] },
+];
+let curMap = MAPS[0], MAP = [], MAP_H = 0, MAP_W = 0;
+function setMap(id){
+  curMap = MAPS.find(m=>m.id===id) || MAPS[0];
+  MAP = curMap.rows.map(r=>r.split('').map(ch => ch==='.' ? 0 : (ch==='c'||ch==='b') ? 2 : 1));
+  MAP_H = MAP.length; MAP_W = MAP[0].length;
+  if(curMap.is3d && typeof World3D!=='undefined'){ World3D.load(); World3D.setMap(curMap.id, curMap.rows); }
+}
+// 3D 맵을 실제로 3D로 그릴 수 있는지 (WebGL2가 없으면 같은 맵을 레이캐스팅으로 그림)
+function map3dOn(){ return !!curMap.is3d && typeof World3D!=='undefined' && World3D.ready; }
+function cellAt(x,y){ const mx=Math.floor(x),my=Math.floor(y);
+  if(mx<0||my<0||mx>=MAP_W||my>=MAP_H) return 1; return MAP[my][mx]; }
+function isWall(x,y){ return cellAt(x,y)!==0; }        // 이동을 막는 칸
+function isSightWall(x,y){ return cellAt(x,y)===1; }   // 시야·총알을 막는 칸 (낮은 엄폐물은 통과)
+setMap((()=>{ try{ return localStorage.getItem('overshot_map_v1'); }catch(e){ return null; } })() || 'classic');
 
 // ---------- 상태 ----------
 const screens = { login:el('login'), pick:el('pick'), game:el('game'), over:el('over') };
@@ -80,6 +119,7 @@ function saveRecords(r){ try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); 
 function recordFor(id){ const r=getRecords(); return r[id]||{kills:0,time:0}; }
 
 function buildHeroes(){
+  buildMaps();
   const list = el('heroList'); list.innerHTML='';
   HEROES.forEach(h=>{
     const bars = Object.entries(h._bars).map(([k,v])=>
@@ -96,6 +136,18 @@ function buildHeroes(){
       div.classList.add('sel');
       const sb=el('startBtn'); sb.style.opacity=1; sb.style.pointerEvents='auto'; };
     list.appendChild(div);
+  });
+}
+// 맵 고르기 (영웅 선택 화면 아래)
+function buildMaps(){
+  const list=el('mapList'); if(!list) return; list.innerHTML='';
+  MAPS.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mapcard'+(m.id===curMap.id?' sel':''); d.dataset.id=m.id;
+    d.innerHTML=`<span class="tag">${m.tag}</span><h4>${m.name}</h4><p>${m.desc}</p>`;
+    d.onclick=()=>{ setMap(m.id); try{ localStorage.setItem('overshot_map_v1',m.id); }catch(e){}
+      document.querySelectorAll('.mapcard').forEach(c=>c.classList.toggle('sel',c.dataset.id===m.id)); };
+    list.appendChild(d);
   });
 }
 el('startBtn').onclick = ()=>{ if(selHero){ hero=selHero; show('game'); startGame(); } };
@@ -421,7 +473,7 @@ function rayHitEnemy(ox,oy,ang){
 function blockedByWall(x0,y0,x1,y1){
   const steps=Math.ceil(Math.hypot(x1-x0,y1-y0)*8);
   for(let i=1;i<steps;i++){ const t=i/steps;
-    if(isWall(x0+(x1-x0)*t, y0+(y1-y0)*t)) return true; }
+    if(isSightWall(x0+(x1-x0)*t, y0+(y1-y0)*t)) return true; }
   return false;
 }
 
@@ -587,6 +639,20 @@ function render(){
     if(iu>-0.25 && iu<1){ const z=1+(iu<0 ? (iu+0.25)*0.16 : 0.2*Math.pow(1-iu,2.2));
       ctx.translate(W/2,H/2); ctx.scale(z,z); ctx.translate(-W/2,-H/2); } }
 
+  const m3d = map3dOn();
+  if(m3d){
+    // 3D 맵: 도시와 적 로봇을 WebGL로 그려 붙임. 총알 탄착 크기 계산용 거리만 광선 몇 개로 잼
+    const nowT=performance.now();
+    ctx.fillStyle='#2a1626'; ctx.fillRect(-14,-14,W+28,H+28);
+    const bots=[];
+    for(const e of enemies) bots.push({ x:e.x, y:e.y, flash: e.hitT ? Math.max(0,1-(nowT-e.hitT)/120)*0.8 : 0 });
+    for(const d of fxDead) bots.push({ x:d.x, y:d.y, fall: Math.max(0.001,Math.min(1,(nowT-d.t)/520)), dir:1 });
+    World3D.render(ctx, player, nowT/1000, bots);
+    depth = new Array(48);
+    for(let r=0;r<48;r++){ const a=player.ang-FOV/2+(r/48)*FOV, ca=Math.cos(a), sa=Math.sin(a); let d=0;
+      while(d<22 && !isSightWall(player.x+ca*d, player.y+sa*d)) d+=0.06;
+      depth[r]=d*Math.cos(a-player.ang); }
+  } else {
   // 하늘 / 바닥 (흔들림 대비 여유있게 큰 영역)
   const skyG = ctx.createLinearGradient(0,0,0,H/2);
   skyG.addColorStop(0,'#16213b'); skyG.addColorStop(1,'#2a3a5c');
@@ -604,7 +670,7 @@ function render(){
     const step=0.012;
     while(dist<22 && !hit){
       dist+=step; x=player.x+ca*dist; y=player.y+sa*dist;
-      if(isWall(x,y)){ hit=true;
+      if(isSightWall(x,y)){ hit=true;
         const fx=x-Math.floor(x), fy=y-Math.floor(y);
         side = (Math.min(fx,1-fx) < Math.min(fy,1-fy))?0:1;
       }
@@ -622,6 +688,7 @@ function render(){
     ctx.fillStyle=`rgb(${cR},${cG},${cB})`;
     ctx.fillRect(r*colW, y0, colW+1, wallH);
   }
+  }
 
   // 적 + 미사일 깊이 정렬해서 함께 그림
   const things=[];
@@ -631,8 +698,8 @@ function render(){
   for(const dd of fxDead) things.push({t:'d',o:dd,d:Math.hypot(dd.x-player.x,dd.y-player.y)});
   things.sort((a,b)=>b.d-a.d);
   for(const it of things){
-    if(it.t==='e') drawEnemy(it.o,it.d,numRays,colW);
-    else if(it.t==='d') drawDeadEnemy(it.o,it.d);
+    if(it.t==='e'){ if(m3d) drawEnemyBar3D(it.o,it.d); else drawEnemy(it.o,it.d,numRays,colW); }
+    else if(it.t==='d'){ if(!m3d) drawDeadEnemy(it.o,it.d); }
     else if(it.t==='m') drawSprite(it.o,it.d,'missile');
     else drawSprite(it.o,it.d,'blast');
   }
@@ -666,7 +733,16 @@ function projectPoint(wx,wy){
   let ang=Math.atan2(dy,dx)-player.ang;
   while(ang<-Math.PI)ang+=2*Math.PI; while(ang>Math.PI)ang-=2*Math.PI;
   const dist=Math.hypot(dx,dy);
+  if(map3dOn()) return { ang, dist, sx:World3D.screenX(Math.max(-1.45,Math.min(1.45,ang)),W,H), vis:Math.abs(ang)<1.2 };   // 3D 맵은 원근 투영
   return { ang, dist, sx:(0.5+ang/FOV)*W, vis:Math.abs(ang)<FOV/2+0.4 };
+}
+// 3D 맵의 적 체력바: 로봇 머리 위에 떠 있음 (벽 뒤면 숨김)
+function drawEnemyBar3D(e,dist){
+  if(e.hp>=e.maxhp || dist<0.3 || blockedByWall(player.x,player.y,e.x,e.y)) return;
+  const q=World3D.project(player,e.x,e.y,0.70); if(!q) return;
+  const bw=Math.max(26,Math.min(120,H*0.16/q.depth));
+  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(q.x-bw/2,q.y-3,bw,6);
+  ctx.fillStyle='#3cf06e'; ctx.fillRect(q.x-bw/2,q.y-3,bw*(e.hp/e.maxhp),6);
 }
 function drawSprite(o,dist,kind){
   if(dist<0.25) return;
@@ -748,12 +824,12 @@ function drawBarrier(){
 }
 
 function drawMinimap(){
-  const cell=8, mw=MAP_W*cell, mh=MAP_H*cell, ox=18, oy=80;
+  const cell=MAP_W>18?6:8, mw=MAP_W*cell, mh=MAP_H*cell, ox=18, oy=80;
   ctx.save();
   ctx.globalAlpha=0.82;
   ctx.fillStyle='#0a0f1a'; roundRect(ox-4,oy-4,mw+8,mh+8,6); ctx.fill();
   for(let y=0;y<MAP_H;y++) for(let x=0;x<MAP_W;x++){
-    if(MAP[y][x]===1){ ctx.fillStyle='#2a3650'; ctx.fillRect(ox+x*cell,oy+y*cell,cell-1,cell-1); }
+    if(MAP[y][x]){ ctx.fillStyle=MAP[y][x]===1?'#2a3650':'#5a4a2e'; ctx.fillRect(ox+x*cell,oy+y*cell,cell-1,cell-1); }
   }
   // 적
   ctx.fillStyle='#ff4d4d';
