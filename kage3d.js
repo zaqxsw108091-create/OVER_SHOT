@@ -17,6 +17,7 @@ const Kage3D = (() => {
   const WRAP_Y0 = -0.66;   // 자루 감기 시작 (쓰바 쪽)
   const WRAP_Y1 = -0.86;   // 자루 감기 끝 (폼멜 쪽)
   const TIP_Y   =  0.9476; // 칼끝
+  const BLADE_Y0 = -0.395; // 하바키(칼집 받침쇠) 위, 날이 시작되는 곳
   const BUTT_Y  = -0.9525; // 폼멜 끝
   // 모델의 자루는 두 주먹이 들어가기엔 짧아서 감기 부분만 늘림 → 팔 모델의 두 주먹(쓰바 아래 ~ 폼멜) 길이에 맞춤
   const WRAP_STRETCH = 2.85;
@@ -75,10 +76,10 @@ const Kage3D = (() => {
   const VS = `#version 300 es
 in vec3 aPos; in vec3 aNor; in vec2 aUv;
 uniform mat3 uM; uniform vec3 uT; uniform vec2 uRes; uniform float uF; uniform vec2 uC;
-out vec3 vP; out vec3 vN; out vec2 vUv;
+out vec3 vP; out vec3 vN; out vec2 vUv; out vec3 vO;
 void main(){
   vec3 p = uM*aPos + uT;
-  vP = p; vN = uM*aNor; vUv = aUv;
+  vP = p; vN = uM*aNor; vUv = aUv; vO = aPos;
   if (uF > 0.0){
     float d = 1.0 - p.z/uF;                                   // 눈에서의 거리 (화면 면 = 1)
     const float dn = 0.12, df = 8.0;                          // 가까운 면 / 먼 면
@@ -93,9 +94,10 @@ void main(){
   // 금속 PBR(GGX) + 가짜 환경 반사 + 하늘색 발광선
   const FS = `#version 300 es
 precision highp float;
-in vec3 vP; in vec3 vN; in vec2 vUv;
+in vec3 vP; in vec3 vN; in vec2 vUv; in vec3 vO;
 uniform sampler2D uBase, uMR, uNrm;
-uniform float uGlow, uGlint, uAlpha;
+uniform float uGlow, uGlint, uAlpha, uBlade;
+uniform vec2 uEdge[24]; uniform vec2 uEdgeY;   // 칼날: 길이 방향 24칸마다 (날 끝 x, 칼등 x), 날이 시작·끝나는 y
 out vec4 o;
 const float PI = 3.14159265;
 vec3 env(vec3 r, float rough){
@@ -125,6 +127,22 @@ void main(){
   vec3 base = pow(bs.rgb, vec3(2.2));
   vec3 mr = texture(uMR, vUv).rgb;
   float rough = clamp(mr.g, 0.10, 1.0), metal = mr.b, ao = mix(1.0, mr.r, 0.6);
+  // 칼날 무늬 (日本刀): 날 쪽은 뿌옇게 흰 하(刃), 그 경계가 물결치는 하몬(刃文), 위쪽은 거울처럼 간 지(地)
+  float hamon = 0.0;
+  if (uBlade > 0.5 && vO.y > uEdgeY.x && abs(vO.z) < 0.02){
+    float f = clamp((vO.y-uEdgeY.x)/(uEdgeY.y-uEdgeY.x), 0.0, 1.0)*23.0;
+    int i0 = int(floor(f)); vec2 e = mix(uEdge[i0], uEdge[min(i0+1,23)], fract(f));
+    float t = clamp((vO.x-e.x)/max(e.y-e.x, 1e-4), 0.0, 1.0);          // 0 = 날 끝, 1 = 칼등
+    float y = vO.y;
+    float hb = 0.29 + 0.055*sin(y*46.0) + 0.030*sin(y*103.0+1.3) + 0.018*sin(y*19.0+0.6);
+    float ha = smoothstep(hb+0.035, hb-0.02, t);                        // 날 쪽 흰 띠
+    hamon = exp(-pow((t-hb)/0.035, 2.0));                               // 경계선 (니오이)
+    float grain = sin(y*240.0 + sin(vO.x*190.0)*2.2)*0.5+0.5;           // 결 (하다)
+    vec3 ji = vec3(0.50,0.53,0.58)*(0.92+0.10*grain), haC = vec3(0.86,0.88,0.90);
+    base = mix(ji, haC, ha) + vec3(0.10)*hamon;
+    base *= 1.0 - 0.22*smoothstep(0.60,0.66,t)*(1.0-smoothstep(0.66,0.72,t));   // 시노기(능선) 선
+    rough = mix(0.10, 0.36, ha); metal = 1.0;
+  }
   vec3 V = vec3(0.0,0.0,1.0);
   float NdV = max(dot(N,V), 0.02);
   vec3 F0 = mix(vec3(0.04), base, metal);
@@ -146,12 +164,13 @@ void main(){
     vec3 spec = D*G*F/(4.0*NdV*NdL+1e-4);
     col += ((1.0-F)*dif/PI + spec) * Lc[i] * NdL;
   }
-  vec3 Fr = F0 + (max(vec3(1.0-rough),F0)-F0)*pow(1.0-NdV,5.0);
+  vec3 Fr = F0 + (max(vec3(1.0-rough),F0)-F0)*pow(1.0-NdV,5.0)*mix(0.22,1.0,metal);   // 옻칠(비금속)은 비스듬히 봐도 하얗게 뜨지 않게
   col += env(reflect(-V,N), rough) * Fr * ao;
   col += dif * vec3(0.16,0.18,0.22) * ao;       // 주변광
   // 하늘색 발광선: 텍스처에서 청록색인 부분만 스스로 빛남
   float cy = smoothstep(0.10,0.40, bs.b-bs.r) * smoothstep(0.45,0.80, bs.b);
   col += vec3(0.25,0.85,1.00) * cy * uGlow;
+  col += vec3(0.55,0.82,1.00) * hamon * max(0.0, uGlow-1.05) * 1.6;   // 벨 때 하몬이 서늘하게 빛남
   col = col*(2.51*col+0.03)/(col*(2.43*col+0.59)+0.14);   // ACES 톤매핑
   col = pow(clamp(col,0.0,1.0), vec3(1.0/2.2));
   o = vec4(col*uAlpha, uAlpha);
@@ -226,7 +245,7 @@ void main(){
       gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FS));
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-      for (const n of ['uM','uT','uRes','uF','uC','uBase','uMR','uNrm','uGlow','uGlint','uAlpha']) st.u[n] = gl.getUniformLocation(prog, n);
+      for (const n of ['uM','uT','uRes','uF','uC','uBase','uMR','uNrm','uGlow','uGlint','uAlpha','uBlade','uEdge','uEdgeY']) st.u[n] = gl.getUniformLocation(prog, n);
       Object.assign(st, { gl, cv, prog });
 
       // 칼: 손 기준점(쓰바 자루쪽 면)을 원점으로 옮기고, 자루 감기 부분만 길게 늘린다
@@ -239,6 +258,16 @@ void main(){
           if (pos[i] < GUARD_Y - 0.01){ pos[i-1] *= GRIP_THICK; pos[i+1] *= GRIP_THICK; }
           pos[i] = y - GUARD_Y;
         }
+        // 칼날 윤곽 재기: 길이 방향 24칸마다 날 끝(가장 작은 x)과 칼등(가장 큰 x) — 하몬을 그릴 때 씀
+        const y0 = BLADE_Y0 - GUARD_Y, y1 = TIP_Y - GUARD_Y - 0.03, mn = new Array(24).fill(1e9), mx = new Array(24).fill(-1e9);
+        for (let i=0;i<pos.length;i+=3){
+          const f = (pos[i+1]-y0)/(y1-y0)*23; if (f < -0.5 || f > 23.5) continue;
+          const k = Math.max(0, Math.min(23, Math.round(f)));
+          if (pos[i] < mn[k]) mn[k] = pos[i]; if (pos[i] > mx[k]) mx[k] = pos[i];
+        }
+        const e = new Float32Array(48);
+        for (let k=0;k<24;k++){ e[k*2] = mn[k] < 1e8 ? mn[k] : (k ? e[k*2-2] : -0.06); e[k*2+1] = mx[k] > -1e8 ? mx[k] : (k ? e[k*2-1] : 0.02); }
+        st.edge = e; st.edgeY = [y0, y1];
       });
       st.tipLen  = TIP_Y - GUARD_Y;
       st.wrap0   = GUARD_Y - WRAP_Y0;
@@ -278,6 +307,8 @@ void main(){
     gl.uniformMatrix3fv(st.u.uM, false, [...cols[0], ...cols[1], ...cols[2]]);
     gl.uniform3fv(st.u.uT, T);
     gl.uniform1f(st.u.uGlow, glow); gl.uniform1f(st.u.uGlint, glint);
+    gl.uniform1f(st.u.uBlade, m === st.blade ? 1 : 0);
+    if (m === st.blade && st.edge){ gl.uniform2fv(st.u.uEdge, st.edge); gl.uniform2f(st.u.uEdgeY, st.edgeY[0], st.edgeY[1]); }
     ['uBase','uMR','uNrm'].forEach((n,i) => { gl.activeTexture(gl.TEXTURE0+i); gl.bindTexture(gl.TEXTURE_2D, m.tex[i]); gl.uniform1i(st.u[n], i); });
     gl.drawElements(gl.TRIANGLES, m.count, m.itype, 0);
   }

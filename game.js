@@ -27,27 +27,66 @@ const HEROES = [
 ];
 
 // ---------- 맵 (1=벽, 0=빈칸) ----------
-const MAP = [
-  "1111111111111111",
-  "1000000001000001",
-  "1011110001011101",
-  "1010000000000101",
-  "1010111101110101",
-  "1000100000010001",
-  "1110100110010111",
-  "1000000000000001",
-  "1011001111001101",
-  "1010000000000101",
-  "1010110001101101",
-  "1000010000100001",
-  "1111010101011111",
-  "1000000000000001",
-  "1011111011111101",
-  "1111111111111111",
-].map(r=>r.split('').map(Number));
-const MAP_H = MAP.length, MAP_W = MAP[0].length;
-function isWall(x,y){ const mx=Math.floor(x),my=Math.floor(y);
-  if(mx<0||my<0||mx>=MAP_W||my>=MAP_H) return true; return MAP[my][mx]===1; }
+// 맵 목록. 글자 격자: '.' 길, '#' 벽·건물, 그 밖은 3D 맵 전용 — 'B' 낮은 구조물, 'p' 기둥, 'c' 상자 더미, 'b' 방호벽
+//  게임 판정용 숫자 격자로 바꿔 씀: 0 = 길, 1 = 시야·이동을 모두 막음, 2 = 낮은 엄폐물(이동만 막고 그 너머로 보고 쏠 수 있음)
+const MAPS = [
+  { id:'classic', name:'클래식 미로', tag:'2.5D', desc:'레이캐스팅으로 그리는 원래 미로. 좁은 복도에서 벌어지는 근접전.',
+    rows:[
+      "################",
+      "#........#.....#",
+      "#.####...#.###.#",
+      "#.#..........#.#",
+      "#.#.####.###.#.#",
+      "#...#......#...#",
+      "###.#..##..#.###",
+      "#..............#",
+      "#.##..####..##.#",
+      "#.#..........#.#",
+      "#.#.##...##.##.#",
+      "#....#....#....#",
+      "####.#.#.#.#####",
+      "#..............#",
+      "#.#####.######.#",
+      "################" ] },
+  { id:'busan', name:'네오 부산', tag:'3D 시안', is3d:true, desc:'네온 간판이 빛나는 노을 진 거리. 높낮이가 다른 건물과 낮은 엄폐물이 있는 넓은 전장.',
+    rows:[
+      "########################",
+      "#.......#......#.......#",
+      "#.......#......#..cc...#",
+      "#..p..........p........#",
+      "#..........bb..........#",
+      "#####..##......##..#####",
+      "#......#...BB...#......#",
+      "#..c...#...BB...#...c..#",
+      "#..c...................#",
+      "#..........p..p........#",
+      "#......#........#......#",
+      "###..###...cc...###..###",
+      "#......#........#......#",
+      "#..b.......p..p.....b..#",
+      "#..b...................#",
+      "#......#...BB...#......#",
+      "#####..##..BB..##..#####",
+      "#......................#",
+      "#..p......bb......p....#",
+      "#.......#......#...cc..#",
+      "#.......#......#.......#",
+      "########################" ] },
+];
+let curMap = MAPS[0], MAP = [], MAP_H = 0, MAP_W = 0;
+function setMap(id){
+  curMap = MAPS.find(m=>m.id===id) || MAPS[0];
+  MAP = curMap.rows.map(r=>r.split('').map(ch => ch==='.' ? 0 : (ch==='c'||ch==='b') ? 2 : 1));
+  MAP_H = MAP.length; MAP_W = MAP[0].length;
+  if(curMap.is3d && typeof World3D!=='undefined'){ World3D.load(); World3D.setMap(curMap.id, curMap.rows); }
+}
+// 3D 맵을 실제로 3D로 그릴 수 있는지 (WebGL2가 없으면 같은 맵을 레이캐스팅으로 그림)
+function map3dOn(){ return !!curMap.is3d && typeof World3D!=='undefined' && World3D.ready; }
+function cellAt(x,y){ const mx=Math.floor(x),my=Math.floor(y);
+  if(mx<0||my<0||mx>=MAP_W||my>=MAP_H) return 1; return MAP[my][mx]; }
+function isWall(x,y){ return cellAt(x,y)!==0; }        // 이동을 막는 칸
+function isSightWall(x,y){ return cellAt(x,y)===1; }   // 시야·총알을 막는 칸 (낮은 엄폐물은 통과)
+setMap((()=>{ try{ return localStorage.getItem('overshot_map_v1'); }catch(e){ return null; } })() || 'classic');
 
 // ---------- 상태 ----------
 const screens = { login:el('login'), pick:el('pick'), game:el('game'), over:el('over') };
@@ -80,6 +119,7 @@ function saveRecords(r){ try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); 
 function recordFor(id){ const r=getRecords(); return r[id]||{kills:0,time:0}; }
 
 function buildHeroes(){
+  buildMaps();
   const list = el('heroList'); list.innerHTML='';
   HEROES.forEach(h=>{
     const bars = Object.entries(h._bars).map(([k,v])=>
@@ -96,6 +136,18 @@ function buildHeroes(){
       div.classList.add('sel');
       const sb=el('startBtn'); sb.style.opacity=1; sb.style.pointerEvents='auto'; };
     list.appendChild(div);
+  });
+}
+// 맵 고르기 (영웅 선택 화면 아래)
+function buildMaps(){
+  const list=el('mapList'); if(!list) return; list.innerHTML='';
+  MAPS.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mapcard'+(m.id===curMap.id?' sel':''); d.dataset.id=m.id;
+    d.innerHTML=`<span class="tag">${m.tag}</span><h4>${m.name}</h4><p>${m.desc}</p>`;
+    d.onclick=()=>{ setMap(m.id); try{ localStorage.setItem('overshot_map_v1',m.id); }catch(e){}
+      document.querySelectorAll('.mapcard').forEach(c=>c.classList.toggle('sel',c.dataset.id===m.id)); };
+    list.appendChild(d);
   });
 }
 el('startBtn').onclick = ()=>{ if(selHero){ hero=selHero; show('game'); startGame(); } };
@@ -118,7 +170,7 @@ let enemies=[], bullets=[];
 let abilActive=false, abilReady=true, abilEnd=0, abilCdEnd=0;
 let firing=false, muzzle=0, swingT=0, swingHitDone=true;
 let recoilAmt=0, shake=0, sway=0;
-let adsActive=false, iaiFlash=0;
+let adsActive=false, iaiFlash=0, iaiPending=false, iaiHit=false;
 let missiles=[], blasts=[];
 let barrierHits=[], barrierOffT=-1e9, meleeKick=0;   // 타이탄 방어막: 맞은 자리(물결)·꺼진 시각, 근접 타격 때 시야 흔들림
 const keys={};
@@ -130,8 +182,8 @@ function startGame(){
   kills=0; enemies=[]; bullets=[]; missiles=[]; blasts=[]; running=true; paused=true; gameTime=0;
   recoilAmt=0; shake=0; swingHitDone=true;
   abilActive=false; abilReady=true; abilCdEnd=0;
-  adsActive=false; iaiFlash=0; swingT=0;
-  barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset();
+  adsActive=false; iaiFlash=0; iaiPending=false; iaiHit=false; swingT=0; kageReset();
+  barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset(); gunSway.t=0;
   fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true; aimBlend=0;
   el('abilName').textContent = hero.ability + ' [E]';
   el('ammoVal').textContent = hero.fireMode==='melee' ? '∞' : ammo;
@@ -343,6 +395,7 @@ function reloadAnim(now){
 function attack(){
   const now=performance.now();
   if(reloading || now-lastShot < currentFireRate()) return;
+  if(hero.weapon==='katana' && iaiFlash && now-iaiFlash<KAGE_RIG.IAI_MS*0.8) return;   // 거합 중엔 일반 베기 불가
   if(hero.fireMode==='melee'){ startSwing(now); return; }
   if(ammo<=0){ reload(); return; }
   lastShot=now; ammo--; el('ammoVal').textContent=ammo; muzzle=now;
@@ -378,6 +431,7 @@ function attack(){
 const SWING_MS=420, SWING_IMPACT=210;
 function startSwing(now){
   if(titanRigOn()) titanSwingStart(now);
+  if(hero.weapon==='katana') kageSwingStart(now);
   lastShot=now; swingT=now; swingHitDone=false;
 }
 function applyMelee(){
@@ -419,7 +473,7 @@ function rayHitEnemy(ox,oy,ang){
 function blockedByWall(x0,y0,x1,y1){
   const steps=Math.ceil(Math.hypot(x1-x0,y1-y0)*8);
   for(let i=1;i<steps;i++){ const t=i/steps;
-    if(isWall(x0+(x1-x0)*t, y0+(y1-y0)*t)) return true; }
+    if(isSightWall(x0+(x1-x0)*t, y0+(y1-y0)*t)) return true; }
   return false;
 }
 
@@ -448,8 +502,10 @@ function useAbility(){
     return;
   }
   if(hero.abilType==='iai'){
-    iaiSlash();
+    // 거합: 먼저 칼을 허리로 당겨 자세를 잡고(納刀の構え), 잠시 뒤 발도와 함께 베기 피해가 들어감 (loop에서 iaiSlash 호출)
+    iaiFlash=now; iaiPending=true; swingHitDone=true; kagePetals=[];
     abilReady=false; abilCdEnd=now+hero.abilCd;
+    toast('거합!', hero.color);
     return;
   }
   abilActive=true; abilReady=false;
@@ -578,7 +634,25 @@ function render(){
   const kick = (hero && hero.fireMode!=='melee') ? recoilAmt*(hero.weapon==='sniper'?14:5) : 0;
   ctx.save();
   ctx.translate(sx, sy+kick+meleeKick);
+  // 거합 돌진: 발도 순간 시야가 앞으로 확 당겨졌다가 돌아옴
+  if(iaiFlash){ const iu=(performance.now()-iaiFlash-KAGE_RIG.IAI_HIT_MS)/260;
+    if(iu>-0.25 && iu<1){ const z=1+(iu<0 ? (iu+0.25)*0.16 : 0.2*Math.pow(1-iu,2.2));
+      ctx.translate(W/2,H/2); ctx.scale(z,z); ctx.translate(-W/2,-H/2); } }
 
+  const m3d = map3dOn();
+  if(m3d){
+    // 3D 맵: 도시와 적 로봇을 WebGL로 그려 붙임. 총알 탄착 크기 계산용 거리만 광선 몇 개로 잼
+    const nowT=performance.now();
+    ctx.fillStyle='#2a1626'; ctx.fillRect(-14,-14,W+28,H+28);
+    const bots=[];
+    for(const e of enemies) bots.push({ x:e.x, y:e.y, flash: e.hitT ? Math.max(0,1-(nowT-e.hitT)/120)*0.8 : 0 });
+    for(const d of fxDead) bots.push({ x:d.x, y:d.y, fall: Math.max(0.001,Math.min(1,(nowT-d.t)/520)), dir:1 });
+    World3D.render(ctx, player, nowT/1000, bots);
+    depth = new Array(48);
+    for(let r=0;r<48;r++){ const a=player.ang-FOV/2+(r/48)*FOV, ca=Math.cos(a), sa=Math.sin(a); let d=0;
+      while(d<22 && !isSightWall(player.x+ca*d, player.y+sa*d)) d+=0.06;
+      depth[r]=d*Math.cos(a-player.ang); }
+  } else {
   // 하늘 / 바닥 (흔들림 대비 여유있게 큰 영역)
   const skyG = ctx.createLinearGradient(0,0,0,H/2);
   skyG.addColorStop(0,'#16213b'); skyG.addColorStop(1,'#2a3a5c');
@@ -596,7 +670,7 @@ function render(){
     const step=0.012;
     while(dist<22 && !hit){
       dist+=step; x=player.x+ca*dist; y=player.y+sa*dist;
-      if(isWall(x,y)){ hit=true;
+      if(isSightWall(x,y)){ hit=true;
         const fx=x-Math.floor(x), fy=y-Math.floor(y);
         side = (Math.min(fx,1-fx) < Math.min(fy,1-fy))?0:1;
       }
@@ -614,6 +688,7 @@ function render(){
     ctx.fillStyle=`rgb(${cR},${cG},${cB})`;
     ctx.fillRect(r*colW, y0, colW+1, wallH);
   }
+  }
 
   // 적 + 미사일 깊이 정렬해서 함께 그림
   const things=[];
@@ -623,8 +698,8 @@ function render(){
   for(const dd of fxDead) things.push({t:'d',o:dd,d:Math.hypot(dd.x-player.x,dd.y-player.y)});
   things.sort((a,b)=>b.d-a.d);
   for(const it of things){
-    if(it.t==='e') drawEnemy(it.o,it.d,numRays,colW);
-    else if(it.t==='d') drawDeadEnemy(it.o,it.d);
+    if(it.t==='e'){ if(m3d) drawEnemyBar3D(it.o,it.d); else drawEnemy(it.o,it.d,numRays,colW); }
+    else if(it.t==='d'){ if(!m3d) drawDeadEnemy(it.o,it.d); }
     else if(it.t==='m') drawSprite(it.o,it.d,'missile');
     else drawSprite(it.o,it.d,'blast');
   }
@@ -646,7 +721,7 @@ function render(){
   if(adsActive && hero && hero.weapon==='sniper' && !paused) drawScopeOverlay();
 
   // 거합베기 화면 이펙트
-  if(iaiFlash && performance.now()-iaiFlash<420) drawIaiEffect(performance.now());
+  if(iaiFlash && performance.now()-iaiFlash<KAGE_RIG.IAI_MS+500) drawIaiEffect(performance.now());
 
   // 미니맵 (좌상단)
   drawMinimap();
@@ -658,7 +733,16 @@ function projectPoint(wx,wy){
   let ang=Math.atan2(dy,dx)-player.ang;
   while(ang<-Math.PI)ang+=2*Math.PI; while(ang>Math.PI)ang-=2*Math.PI;
   const dist=Math.hypot(dx,dy);
+  if(map3dOn()) return { ang, dist, sx:World3D.screenX(Math.max(-1.45,Math.min(1.45,ang)),W,H), vis:Math.abs(ang)<1.2 };   // 3D 맵은 원근 투영
   return { ang, dist, sx:(0.5+ang/FOV)*W, vis:Math.abs(ang)<FOV/2+0.4 };
+}
+// 3D 맵의 적 체력바: 로봇 머리 위에 떠 있음 (벽 뒤면 숨김)
+function drawEnemyBar3D(e,dist){
+  if(e.hp>=e.maxhp || dist<0.3 || blockedByWall(player.x,player.y,e.x,e.y)) return;
+  const q=World3D.project(player,e.x,e.y,0.70); if(!q) return;
+  const bw=Math.max(26,Math.min(120,H*0.16/q.depth));
+  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(q.x-bw/2,q.y-3,bw,6);
+  ctx.fillStyle='#3cf06e'; ctx.fillRect(q.x-bw/2,q.y-3,bw*(e.hp/e.maxhp),6);
 }
 function drawSprite(o,dist,kind){
   if(dist<0.25) return;
@@ -740,12 +824,12 @@ function drawBarrier(){
 }
 
 function drawMinimap(){
-  const cell=8, mw=MAP_W*cell, mh=MAP_H*cell, ox=18, oy=80;
+  const cell=MAP_W>18?6:8, mw=MAP_W*cell, mh=MAP_H*cell, ox=18, oy=80;
   ctx.save();
   ctx.globalAlpha=0.82;
   ctx.fillStyle='#0a0f1a'; roundRect(ox-4,oy-4,mw+8,mh+8,6); ctx.fill();
   for(let y=0;y<MAP_H;y++) for(let x=0;x<MAP_W;x++){
-    if(MAP[y][x]===1){ ctx.fillStyle='#2a3650'; ctx.fillRect(ox+x*cell,oy+y*cell,cell-1,cell-1); }
+    if(MAP[y][x]){ ctx.fillStyle=MAP[y][x]===1?'#2a3650':'#5a4a2e'; ctx.fillRect(ox+x*cell,oy+y*cell,cell-1,cell-1); }
   }
   // 적
   ctx.fillStyle='#ff4d4d';
@@ -879,6 +963,7 @@ function drawHand(hx,hy,r, glove='#11151f', top='#1c2333', ring){
 function drawWeapon(){
   const now=performance.now();
   if(titanRigOn()){ drawHammerRig(now); return; }   // 타이탄: 3D 망치 + 두 팔 (흔들림도 3D로 직접 계산)
+  if(gunRigOn()){ drawGunRig(now); return; }         // 스파크·메디카: 3D 총 + 두 팔
   const moving = keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'];
   const gun = hero.weapon==='rifle' || hero.weapon==='sniper';
   const amp = (moving?1:0.4) * (gun ? 1-0.65*_smooth(aimBlend) : 1);   // 겨누는 중엔 흔들림이 줄어듦
@@ -1515,14 +1600,12 @@ function iaiSlash(){
     e.hp-=135; hitAny=true;
     if(e.hp<=0) killEnemy(e);
   }
-  if(hitAny){ hitMarker(); shake=Math.max(shake,14); }
-  else shake=Math.max(shake,6);
+  if(hitAny){ hitMarker(); shake=Math.max(shake,16); }
+  else shake=Math.max(shake,7);
+  iaiHit=hitAny;
 
   // 원래 위치로 즉시 복귀 (거합의 핵심: 치고 제자리로)
   player.x=ox; player.y=oy;
-
-  iaiFlash=performance.now();
-  toast('거합!', hero.color);
 }
 
 // ── 일본도 RISING DRAGON (카게) ─────────────────────────────
@@ -1763,7 +1846,7 @@ function drawKatana(now){
 //  cutting: 지금 베는 중이면 칼끝·칼 중간 위치를 기록 → 칼날이 실제로 지나간 자리를 따라 하늘색 궤적
 //  reset: 쉬는 중이면 궤적 지움,  impact: 0~1 이면 칼끝 임팩트 빛 (-1 이면 없음)
 function drawKatanaFx(now, cutting, reset, tipX, tipY, midX, midY, impact){
-  const CY='#3fe0ff';
+  const CY='#bfe4ff';
   if(cutting) kTrail.push({ tx:tipX, ty:tipY, mx:midX, my:midY, t:now });
   else if(reset) kTrail=[];
   kTrail=kTrail.filter(p=>now-p.t<140);
@@ -1783,7 +1866,7 @@ function drawKatanaFx(now, cutting, reset, tipX, tipY, midX, midY, impact){
     ctx.save();
     ctx.globalAlpha=(1-f)*0.82;
     const ig=ctx.createRadialGradient(tipX,tipY,0,tipX,tipY,52*(1-f)+6);
-    ig.addColorStop(0,'rgba(230,255,255,0.95)'); ig.addColorStop(1,'rgba(63,224,255,0)');
+    ig.addColorStop(0,'rgba(240,250,255,0.95)'); ig.addColorStop(1,'rgba(150,205,255,0)');
     ctx.fillStyle=ig; ctx.beginPath(); ctx.arc(tipX,tipY,52*(1-f)+6,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
@@ -1797,39 +1880,74 @@ function drawKatanaFx(now, cutting, reset, tipX, tipY, midX, midY, impact){
 //        크기(모델 1단위 = 픽셀), 날 방향(손 안에서 칼을 돌린 각도: -면 날이 앞-왼쪽, +면 앞-오른쪽)]
 // 팔 모델은 뼈대가 없는 한 덩어리라 크게 돌리면 팔이 화면을 가림 → 회전은 손목 정도로만, 움직임은 주먹 이동으로 냄
 const KAGE_RIG = {
-  IDLE: [  25, -165, -0.55,  0.00,  0.07, 560, -0.75],   // 중단세(中段): 칼을 몸 가운데에 두고 칼끝을 적의 얼굴 쪽으로 겨눔
-  UP:   [ 150, -280,  0.10,  0.05, -0.30, 560, -0.85],   // 들기: 오른쪽 어깨 위로 (왼팔이 앞을 가로지름)
-  CUT:  [-180,  -60, -0.30, -0.05,  1.00, 560, -0.60],   // 袈裟斬り: 왼쪽 아래로 사선 내리베기 — 칼이 왼쪽으로 눕고 날이 앞-왼쪽(베는 방향)
+  IDLE:   [  25, -165, -0.55,  0.00,  0.07, 560, -0.75],   // 중단세(中段): 칼을 몸 가운데에 두고 칼끝을 적의 얼굴 쪽으로 겨눔
+  // 1타 袈裟斬り(게사기리): 오른쪽 어깨 위로 들었다가 왼쪽 아래로 비스듬히 내리벰
+  UP:     [ 150, -280,  0.10,  0.05, -0.30, 560, -0.85],
+  CUT:    [-180,  -60, -0.30, -0.05,  1.00, 560, -0.60],
+  // 2타 逆袈裟(갸쿠게사): 왼쪽 아래에서 날을 위로 돌려 오른쪽 위로 올려벰 — 1타가 끝난 자리에서 그대로 이어짐
+  LOW:    [-180,  -60, -0.30, -0.05,  1.00, 560,  1.10],
+  RISE:   [ 160, -290,  0.10,  0.05, -0.30, 560,  1.00],
+  // 3타 真向斬り(쇼멘): 머리 위 가운데로 크게 들어(上段) 곧게 내리벰
+  JODAN:  [  30, -300,  0.22,  0.00, -0.05, 560, -0.75],
+  SHOMEN: [  15, -110, -0.90,  0.00,  0.05, 560, -0.75],
   SWING_MS: 500,
-  IAI_A:[-180,  -60, -0.30, -0.05,  1.00, 560,  1.10],   // 거합 시작: 칼을 왼쪽 아래로 눕히며 날을 오른쪽 위로 돌림
-  IAI_B:[ 160, -290,  0.10,  0.05, -0.30, 560,  1.00],   // 거합: 왼쪽 아래 → 오른쪽 위로 빠르게 올려베기(逆袈裟)
-  IAI_MS: 420,
+  // 거합(居合): 허리로 당겨 자세 → 발도 가로베기(抜き付け) → 머리 위에서 내리베기(切り下ろし) → 피 털기(血振り) → 중단세
+  HIP:    [-210,  -40, -0.15, -0.25,  0.90, 560,  1.10],
+  SWEEP:  [ 230, -150, -0.35,  0.35, -0.80, 560,  0.90],
+  CHIBURI:[ 250, -120, -0.40,  0.50, -1.00, 560,  0.90],
+  IAI_MS: 900,
+  IAI_HIT_MS: 285,    // 발도 순간 (베기 피해가 들어감)
 };
+// 자세 궤도: [끝나는 시점 u, 자세, 빠르기 곡선] 을 차례로 이어 붙임. 첫 구간은 '지금 자세'에서 출발
+const _kOut=u=>1-Math.pow(1-u,2.4), _kIn=u=>Math.pow(u,2.3), _kLin=u=>u;
+function kageTrack(combo){
+  const R=KAGE_RIG;
+  if(combo===1) return [[0.22,R.LOW,_kOut],[0.50,R.RISE,_kIn],[0.62,R.RISE,_kLin],[1,R.IDLE,_smooth]];
+  if(combo===2) return [[0.24,R.JODAN,_kOut],[0.50,R.SHOMEN,_kIn],[0.64,R.SHOMEN,_kLin],[1,R.IDLE,_smooth]];
+  return [[0.22,R.UP,_kOut],[0.50,R.CUT,_kIn],[0.62,R.CUT,_kLin],[1,R.IDLE,_smooth]];
+}
+const KAGE_IAI_TRACK = () => { const R=KAGE_RIG;
+  return [[0.20,R.HIP,_kOut],[0.30,R.HIP,_kLin],[0.38,R.SWEEP,_kIn],[0.48,R.JODAN,_kOut],[0.57,R.SHOMEN,_kIn],[0.66,R.SHOMEN,_kLin],[0.79,R.CHIBURI,_smooth],[1,R.IDLE,_smooth]]; };
+function kageEval(track, from, u){
+  let prev=from, u0=0;
+  for(const [u1,pose,ease] of track){
+    if(u<=u1){ const x=ease(Math.max(0,Math.min(1,(u-u0)/(u1-u0)))); return prev.map((v,i)=>_lerp(v,pose[i],x)); }
+    prev=pose; u0=u1;
+  }
+  return prev.slice();
+}
+let kageCombo=0, kageFrom=null, kageCur=null, kagePetals=[];
+function kageReset(){ kageCombo=0; kageFrom=null; kageCur=null; kagePetals=[]; kTrail=[]; }
+// 일반 베기 시작: 이어 치면 게사기리 → 갸쿠게사 → 쇼멘 순으로 넘어감
+function kageSwingStart(now){
+  kageCombo = (swingT && now-swingT < KAGE_RIG.SWING_MS+320) ? (kageCombo+1)%3 : 0;
+  kageFrom = kageCur ? kageCur.slice() : null;
+}
 function drawKatanaRig(now){
   const R=KAGE_RIG, sc=weaponScale();
   ctx.save(); ctx.scale(sc,sc);
-  const mix=(A,B,u)=>A.map((v,i)=>_lerp(v,B[i],u));
   const breath=Math.sin(now*0.0018);
   let K=R.IDLE.slice(); K[1]+=breath*5; K[2]+=breath*0.015;
+  const idle=K.slice();
   let t=-1, ti=-1;
-  if(swingT && now-swingT<R.SWING_MS){
-    t=(now-swingT)/R.SWING_MS;
-    if(t<0.20)      K=mix(R.IDLE,R.UP,_easeOut(t/0.20));          // 들어올리기
-    else if(t<0.52) K=mix(R.UP,R.CUT,_easeIn((t-0.20)/0.32));     // 사선 베기 (점점 빨라짐)
-    else            K=mix(R.CUT,R.IDLE,_smooth((t-0.52)/0.48));   // 겨눔으로 돌아옴
-  } else if(iaiFlash && now-iaiFlash<R.IAI_MS){
+  if(iaiFlash && now-iaiFlash<R.IAI_MS){
     ti=(now-iaiFlash)/R.IAI_MS;
-    if(ti<0.22)      K=mix(R.IDLE,R.IAI_A,_easeOut(ti/0.22));      // 칼을 왼쪽 아래로 내리며 날을 위로 돌림
-    else if(ti<0.48) K=mix(R.IAI_A,R.IAI_B,_easeIn((ti-0.22)/0.26)); // 올려베기 (매우 빠르게)
-    else             K=mix(R.IAI_B,R.IDLE,_smooth((ti-0.48)/0.52));
+    K=kageEval(KAGE_IAI_TRACK(), kageFrom||idle, ti);
+    if(ti>0.20 && ti<0.30){ K[0]+=Math.sin(now*0.09)*2.5; K[1]+=Math.cos(now*0.11)*2; }    // 자세를 잡고 힘을 모으는 떨림
+  } else if(swingT && now-swingT<R.SWING_MS){
+    t=(now-swingT)/R.SWING_MS;
+    K=kageEval(kageTrack(kageCombo), kageFrom||idle, t);
   }
-  const cutting = (t>0.18 && t<0.56) || (ti>0.22 && ti<0.52);
-  const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.42)/0.22) : ti>=0 ? Math.max(0, 1-Math.abs(ti-0.38)/0.2) : 0;
-  const glint = (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : (ti>0.22 && ti<0.6) ? _lerp(1.6, -1.4, (ti-0.22)/0.38) : -9;
+  if(ti<0 || ti>0.02) kageCur=K.slice();
+  if(ti>=0 && ti<0.02) kageFrom=kageCur ? kageCur.slice() : null;
+  const cutting = (t>0.20 && t<0.56) || (ti>0.30 && ti<0.40) || (ti>0.48 && ti<0.60);
+  const cutGlow = t>=0 ? Math.max(0, 1-Math.abs(t-0.40)/0.22)
+                : ti>=0 ? Math.max(0, 1-Math.abs(ti-0.34)/0.07, 1-Math.abs(ti-0.53)/0.08, ti>0.2&&ti<0.3 ? 0.5 : 0) : 0;
+  const glint = (t>0.18 && t<0.62) ? _lerp(-1.4, 1.6, (t-0.18)/0.44) : (ti>0.30 && ti<0.62) ? _lerp(1.6, -1.4, (ti-0.30)/0.32) : -9;
   const r = Kage3D.drawRig(ctx,{ x:K[0], y:K[1], pitch:K[2], yaw:K[3], roll:K[4], scale:K[5], twist:K[6],
-    glow: 1.0 + 0.12*Math.sin(now*0.004) + 1.1*cutGlow, glint });
+    glow: 1.0 + 1.5*cutGlow, glint });
   if(r){
-    const impact = (t>0.38 && t<0.60) ? (t-0.38)/0.22 : (ti>0.40 && ti<0.62) ? (ti-0.40)/0.22 : -1;
+    const impact = (t>0.38 && t<0.60) ? (t-0.38)/0.22 : (ti>0.33 && ti<0.45) ? (ti-0.33)/0.12 : (ti>0.55 && ti<0.67) ? (ti-0.55)/0.12 : -1;
     drawKatanaFx(now, cutting, t<0 && ti<0, r.tip[0], r.tip[1], r.mid[0], r.mid[1], impact);
   }
   ctx.restore();
@@ -1884,30 +2002,179 @@ function drawScopeOverlay(){
 
 // ── 거합베기 화면 이펙트 ──────────────────────────────────
 function drawIaiEffect(now){
-  const t=now-iaiFlash;
-  if(t>420) return;
-  const f=1-t/420;
+  // 거합 화면 연출: 화면 위아래가 어두워지며 숨을 죽임 → 발도 순간 가로 섬광 → 내리베기 세로 섬광
+  //  → 베인 자국이 잠시 남았다가 사라지고, 벚꽃잎이 흩날림(残心)
+  const R=KAGE_RIG, t=now-iaiFlash, u=t/R.IAI_MS, hit=R.IAI_HIT_MS;
+  if(t>R.IAI_MS+500) return;
   ctx.save();
-  // 대각선 베기 잔광
-  ctx.globalAlpha=f*0.72;
-  const g=ctx.createLinearGradient(0,H*0.40,W,H*0.62);
-  g.addColorStop(0,'rgba(63,224,255,0)');
-  g.addColorStop(0.40,'rgba(170,245,255,0.92)');
-  g.addColorStop(0.60,'rgba(170,245,255,0.92)');
-  g.addColorStop(1,'rgba(63,224,255,0)');
-  ctx.fillStyle=g; ctx.fillRect(0,H*0.32,W,H*0.34);
-  // 슬래시 라인
-  ctx.globalAlpha=f*0.95;
-  ctx.strokeStyle='rgba(235,255,255,0.95)';
-  ctx.lineWidth=2.5*f+0.5; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(-20,H*0.40); ctx.lineTo(W+20,H*0.60); ctx.stroke();
-  ctx.lineWidth=1.2*f;
-  ctx.beginPath(); ctx.moveTo(-20,H*0.43); ctx.lineTo(W+20,H*0.63); ctx.stroke();
+  // 위아래 어두운 띠 + 가장자리 어둠 (집중)
+  const focus = t<hit ? _smooth(Math.min(1,t/200)) : Math.max(0, 1-(t-hit)/520);
+  if(focus>0.01){
+    const bar=H*0.085*focus;
+    ctx.fillStyle=`rgba(4,6,12,${0.9*focus})`; ctx.fillRect(0,0,W,bar); ctx.fillRect(0,H-bar,W,bar);
+    const vg=ctx.createRadialGradient(W/2,H/2,H*0.25,W/2,H/2,Math.max(W,H)*0.7);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,`rgba(2,4,14,${0.62*focus})`);
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  }
+  // 힘을 모으는 동안: 왼쪽 허리의 칼자루로 빛이 모여듦
+  if(t<hit){
+    const k=Math.min(1,t/hit), cx=W*0.24, cy=H*0.80;
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<10;i++){ const a=i*0.628+now*0.004, rr=(1-k)*190+14+((i*53)%40);
+      ctx.strokeStyle=`rgba(190,228,255,${0.5*k})`; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr*0.7); ctx.lineTo(cx+Math.cos(a)*(rr+26),cy+Math.sin(a)*(rr+26)*0.7); ctx.stroke(); }
+    glowDot(cx,cy,6+10*k,'#bfe4ff',0.7*k);
+    ctx.globalCompositeOperation='source-over';
+  }
+  // 섬광과 베인 자국: [시작 ms, 시작점, 끝점]
+  const cuts=[[hit,    [-0.04,0.60],[1.04,0.40]],      // 발도 가로베기 (왼쪽 아래 → 오른쪽 위로 살짝 기운 一文字)
+              [hit+215,[0.56,-0.05],[0.46,1.05]]];     // 내리베기
+  for(const [t0,a,b] of cuts){
+    const dt=t-t0; if(dt<0) continue;
+    const x0=a[0]*W, y0=a[1]*H, x1=b[0]*W, y1=b[1]*H;
+    const grow=Math.min(1,dt/55), ex=x0+(x1-x0)*grow, ey=y0+(y1-y0)*grow;
+    const f=Math.max(0,1-dt/170);                        // 번쩍임
+    const scar=Math.max(0,1-Math.max(0,dt-170)/560);     // 남는 자국
+    ctx.lineCap='round';
+    if(f>0){
+      const nx=-(y1-y0), ny=x1-x0, nl=Math.hypot(nx,ny), wdt=H*0.16*f;
+      const g=ctx.createLinearGradient((x0+x1)/2-nx/nl*wdt,(y0+y1)/2-ny/nl*wdt,(x0+x1)/2+nx/nl*wdt,(y0+y1)/2+ny/nl*wdt);
+      g.addColorStop(0,'rgba(120,190,255,0)'); g.addColorStop(0.5,`rgba(225,244,255,${0.85*f})`); g.addColorStop(1,'rgba(120,190,255,0)');
+      ctx.strokeStyle=g; ctx.lineWidth=wdt*2; ctx.lineCap='butt';
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(ex,ey); ctx.stroke(); ctx.lineCap='round';
+      if(dt<70){ ctx.fillStyle=`rgba(235,246,255,${0.30*(1-dt/70)})`; ctx.fillRect(0,0,W,H); }   // 화면 전체가 순간 하얗게
+    }
+    if(scar>0){
+      ctx.strokeStyle=`rgba(240,250,255,${0.95*scar})`; ctx.lineWidth=1+3.5*scar;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(ex,ey); ctx.stroke();
+      ctx.strokeStyle=`rgba(110,185,255,${0.5*scar})`; ctx.lineWidth=7+10*scar;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(ex,ey); ctx.stroke();
+    }
+  }
+  // 벚꽃잎: 발도와 함께 흩어져 천천히 떨어짐
+  if(t>=hit && !kagePetals.length && t<hit+60){
+    for(let i=0;i<22;i++) kagePetals.push({ x:W*(0.15+Math.random()*0.7), y:H*(0.25+Math.random()*0.45),
+      vx:(0.25+Math.random()*0.9)*W*0.5, vy:(-0.2+Math.random()*0.5)*H*0.3, r:4+Math.random()*5, a:Math.random()*6.28, va:(Math.random()-0.5)*9, ph:Math.random()*6 });
+    kagePetals.t=now;
+  }
+  if(kagePetals.length){
+    const dt=Math.min(0.05,(now-(kagePetals.t||now))/1000); kagePetals.t=now;
+    const al=Math.max(0,Math.min(1,(R.IAI_MS+500-t)/450));
+    for(const p of kagePetals){
+      p.vx*=1-1.5*dt; p.vy+=H*0.35*dt; p.x+=p.vx*dt+Math.sin(now*0.004+p.ph)*0.6; p.y+=p.vy*dt; p.a+=p.va*dt;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.a); ctx.scale(1,0.55+0.4*Math.sin(now*0.006+p.ph));
+      ctx.fillStyle=`rgba(255,196,214,${0.85*al})`;
+      ctx.beginPath(); ctx.moveTo(0,-p.r); ctx.quadraticCurveTo(p.r*0.9,-p.r*0.2,0,p.r); ctx.quadraticCurveTo(-p.r*0.9,-p.r*0.2,0,-p.r); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // 붓글씨 풍 글자 (残心)
+  if(t>hit+120){
+    const a=Math.min(1,(t-hit-120)/140)*Math.max(0,Math.min(1,(R.IAI_MS+420-t)/300));
+    ctx.fillStyle=`rgba(236,244,255,${0.9*a})`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font=`900 ${Math.round(H*0.075)}px "Noto Serif JP","Yu Mincho","Hiragino Mincho ProN","Nanum Myeongjo",serif`;
+    ctx.shadowColor='rgba(80,160,255,0.9)'; ctx.shadowBlur=18;
+    ctx.fillText('居', W*0.90, H*0.34); ctx.fillText('合', W*0.90, H*0.34+H*0.09);
+    ctx.shadowBlur=0;
+  }
   ctx.restore();
 }
 
 // 망치 SENTINEL MAUL (탱커) — 위에서 아래로 크게 내려치는 오버헤드 슬램
 // 디자인: 모서리 깎인 짙은 강철 머리 + 윗면 가시, 파랗게 빛나는 에너지 셀 4개, 파랑·주황 장갑
+// ── 3D 총 (스파크 RAZOR-FX · 메디카 LUX-VALOR) — 1인칭 ───────────
+//  guns3d.js가 총·탄창·두 팔을 3D로 그린다. 여기서는 자세(내려 든 자세·겨눔)와 반동·재장전·노리쇠·화염 효과를 정한다
+//  자세 = [총 원점 위치, 총구가 향하는 방향, 총 윗면이 향하는 방향]  (눈이 원점, x 오른쪽, y 위, -z 앞, 단위 미터)
+if(typeof Guns3D!=='undefined') Guns3D.load();
+const GUN_RIG = {
+  rifle:  { LOW:[[0.150,-0.150,-0.30],[-0.20,-0.07,-1],[0.14,1,0]],     // 내려 든 자세: 오른쪽 아래에서 총구가 가운데 아래를 향함
+            AIM:[[0.000,-0.113,-0.19],[0,0,-1],[0,1,0]] },                // 겨눔: 조준경 창이 화면 가운데에 옴
+  sniper: { LOW:[[0.165,-0.170,-0.34],[-0.22,-0.04,-1],[0.14,1,0]],
+            AIM:[[0.080,-0.158,-0.29],[-0.045,0.012,-1],[0.04,1,0]] },    // 견착: 조준경이 조준점 오른쪽 아래 (우클릭하면 스코프 화면)
+};
+const gunSway = { t:0, walk:0, turn:0, ang:0 };
+function gunRigOn(){ return !!hero && (hero.weapon==='rifle'||hero.weapon==='sniper') && typeof Guns3D!=='undefined' && Guns3D.ready; }
+function drawGunRig(now){
+  const kind=hero.weapon, G=GUN_RIG[kind], sn=kind==='sniper';
+  const dt=Math.max(1,Math.min(50, gunSway.t ? now-gunSway.t : 16)); gunSway.t=now;
+  const moving = !paused && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']);
+  gunSway.walk += ((moving?1:0)-gunSway.walk)*Math.min(1,dt/140);
+  let dAng=player.ang-gunSway.ang; gunSway.ang=player.ang;
+  while(dAng>Math.PI) dAng-=2*Math.PI; while(dAng<-Math.PI) dAng+=2*Math.PI;
+  gunSway.turn += (Math.max(-1,Math.min(1,dAng/(dt*0.004)))-gunSway.turn)*Math.min(1,dt/110);
+  const A=_smooth(Math.max(0,Math.min(1,aimBlend))), arc=Math.sin(A*Math.PI);
+  const L3=(a,b,u)=>[_lerp(a[0],b[0],u),_lerp(a[1],b[1],u),_lerp(a[2],b[2],u)];
+  const p=L3(G.LOW[0],G.AIM[0],A), fwd=L3(G.LOW[1],G.AIM[1],A), up=L3(G.LOW[2],G.AIM[2],A);
+  p[1]+=arc*0.018; up[0]+=arc*0.05;                                   // 올리는 도중 살짝 위로 휘고 기울었다가 바로 섬
+  // 몸 움직임: 숨쉬기·걸을 때 출렁임·시점 돌릴 때 늦게 따라옴 (겨누면 줄어듦)
+  const calm=1-0.75*A, wk=now*0.0092;
+  p[0]+=(Math.sin(wk*0.5)*0.009*gunSway.walk+Math.sin(now*0.0011)*0.0015)*calm - gunSway.turn*0.016*calm;
+  p[1]+=(-Math.abs(Math.sin(wk*0.5))*0.011*gunSway.walk+Math.sin(now*0.0019)*0.0022)*calm;
+  fwd[0]-=gunSway.turn*0.05*calm;
+  // 반동: 뒤로 밀리고 총구가 들림, 좌우로 조금 튐
+  const k=recoilAmt;
+  p[2]+=k*(sn?0.034:0.014); p[1]+=k*(sn?0.010:0.003); fwd[1]+=k*(sn?0.075:0.022); fwd[0]+=recoilJit*k*0.35;
+  // 재장전: 총을 기울여 세우고, 왼손이 탄창을 빼서 새 탄창을 끼움
+  const R=reloadAnim(now);
+  fwd[1]+=R.tilt*0.26; up[0]-=R.tilt*0.55; p[0]-=R.tilt*0.045; p[1]+=R.tilt*0.055;
+  const mt=now-muzzle, lt=now-missileFireT, charge=abilCharge(now);
+  // 저격총 노리쇠: 쏜 뒤 오른손이 손잡이를 들어 당겼다 밀어 넣음 (당겨진 순간 탄피가 튐)
+  let pull=R.ch, boltHand=0;
+  if(sn){
+    const bu=(mt>200 && mt<800)?(mt-200)/600:-1;
+    if(bu>=0){ pull=bu<0.45?_smooth(bu/0.45):1-_smooth((bu-0.45)/0.55); boltHand=_smooth(Math.min(1,bu/0.14, (1-bu)/0.14));
+      if(bu>=0.45 && !sniperEjected){ sniperEjected=true; spawnCasing(true); } }
+  }
+  const flash = mt<(sn?110:70) ? 1-mt/(sn?110:70) : 0;
+  const pulse=0.85+0.15*Math.sin(now*0.005);
+  const heal = sn && abilActive ? 0.9+0.3*Math.sin(now*0.02) : 0;
+  const E = sn ? [1, 0.8*pulse+heal+flash*1.2, 0.7+flash*2.5+heal*0.5, 0.8+heal, 1, 0.8+heal]
+               : [1, pulse+flash*0.8, 0.2+1.1*charge+(lt<160?2:0), mt<60?2.2:1, 1, pulse];
+  const front = sn ? [0.9*flash*0.9,1.5*flash*0.9,2.2*flash*0.9] : [2.6*flash*1.6,1.5*flash*1.6,0.55*flash*1.6];
+  const P=FP3D.aim(p,fwd,up);
+  const r=Guns3D.draw(ctx, kind, P, { magDy:R.magDy/170*0.27, magShow:R.magA>0.05, hand:R.hand, pull, boltHand,
+    charge, podKick: lt<260 ? (1-lt/260)*0.02 : 0, E, front,
+    ammo: (R.rp>=0.62||!reloading) ? (reloading?maxammo:ammo) : ammo, maxammo });
+  if(!r) return;
+  const pt=q=>q?{x:q[0],y:q[1]}:null;
+  gunFx.muzzle=pt(r.muzzle)||{x:W/2,y:H*0.6}; gunFx.eject=pt(r.eject); gunFx.pod=pt(r.pod);
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  // 총구 화염: 앞으로 뻗는 불꽃 + 주변을 밝히는 빛
+  if(flash>0 && r.muzzle){
+    const [mx,my]=r.muzzle, sc=Math.max(120,r.scale)*(sn?0.20:0.16)*(1-0.4*A), v=Math.floor(muzzle)%3;
+    ctx.globalCompositeOperation='lighter';
+    const c0=sn?'190,240,255':'255,200,110', c1=sn?'90,190,255':'255,140,40';
+    const lg=ctx.createRadialGradient(mx,my,0,mx,my,sc*2.6);
+    lg.addColorStop(0,`rgba(${c0},${0.55*flash})`); lg.addColorStop(1,`rgba(${c1},0)`);
+    ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(mx,my,sc*2.6,0,7); ctx.fill();
+    ctx.translate(mx,my); ctx.rotate(v*0.7);
+    ctx.fillStyle=`rgba(${c0},${0.9*flash})`; ctx.beginPath();
+    for(let i=0;i<10;i++){ const an=i/10*Math.PI*2, rr=(i%2?0.38:1)*sc*(0.6+0.4*flash)*(1+0.2*v); ctx[i?'lineTo':'moveTo'](Math.cos(an)*rr,Math.sin(an)*rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle=`rgba(255,252,235,${flash})`; ctx.beginPath(); ctx.arc(0,0,sc*0.3,0,7); ctx.fill();
+    ctx.setTransform(1,0,0,1,0,0); ctx.globalCompositeOperation='source-over';
+  }
+  if(!sn){
+    // 미사일 발사 화염 + 떠 있는 홀로그램 표시 (READY / 충전 % / LAUNCH)
+    if(lt<160 && r.pod){ ctx.globalCompositeOperation='lighter'; glowDot(r.pod[0],r.pod[1],(1-lt/160)*28+6,'#ff8a2a',1-lt/160); ctx.globalCompositeOperation='source-over'; }
+    if(r.sight && A<0.5){ ctx.globalAlpha=1-A*2; drawHoloTag(r.sight[0]-42, r.sight[1]-Math.max(90,r.scale*0.14), now, charge, lt, '#ff8a2a'); ctx.globalAlpha=1; }
+    // 홀로그램 조준점: 겨누면 조준경 창 안에 떠오름 (적을 겨누면 붉게)
+    if(A>0.55 && r.sight){
+      const a=(A-0.55)/0.45, cx=W/2, cy=H/2, col=aimOnTarget?'255,70,60':'255,150,60', rr=Math.max(14,H*0.026);
+      ctx.strokeStyle=`rgba(${col},${0.9*a})`; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7); ctx.stroke();
+      for(let i=0;i<4;i++){ const an=i*Math.PI/2; ctx.beginPath(); ctx.moveTo(cx+Math.cos(an)*rr,cy+Math.sin(an)*rr); ctx.lineTo(cx+Math.cos(an)*rr*1.45,cy+Math.sin(an)*rr*1.45); ctx.stroke(); }
+      ctx.fillStyle=`rgba(${col},${a})`; ctx.beginPath(); ctx.arc(cx,cy,2.4,0,7); ctx.fill();
+    }
+  } else if(heal>0 && r.muzzle){
+    // 회복 가동 중: 총에서 하늘색 빛 알갱이가 피어오름
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<9;i++){ const ph=(now*0.0006+i*0.137)%1, x=W*(0.56+0.36*((i*0.618)%1)), y=H*(0.98-ph*0.5);
+      glowDot(x+Math.sin(now*0.003+i)*8, y, 2.2+2*(1-ph), '#5fe6ff', 0.55*(1-ph)); }
+    ctx.globalCompositeOperation='source-over';
+  }
+  ctx.restore();
+}
+
 // ── 전투 망치 SENTINEL MAUL (타이탄) — 3D 1인칭 ───────────────
 //  titan3d.js가 망치·장갑 두 팔을 3D로 그린다. 여기서는 자세(대기·휘두르기·방어)와 빛·궤적·충격 효과를 정한다
 //  자세 한 줄 = [기준점 위치 x,y,z,  자루 방향 x,y,z,  타격면이 향하는 방향 x,y,z]  (눈이 원점, x 오른쪽, y 위, -z 앞, 단위 미터)
@@ -1961,7 +2228,7 @@ function titanSwingPose(u, combo, from, base){
   const x=(u-0.60)/0.40; return Titan3D.mix(THRU, base, x*x*x*(x*(x*6-15)+10));                       // 천천히 대기 자세로
 }
 function drawHammerRig(now){
-  const R=TITAN_RIG, dt=Math.min(50, titanPrevT ? now-titanPrevT : 16); titanPrevT=now;
+  const R=TITAN_RIG, dt=Math.max(1,Math.min(50, titanPrevT ? now-titanPrevT : 16)); titanPrevT=now;
   // 몸 움직임: 걸을 때 출렁임, 시점을 돌리면 무기가 살짝 늦게 따라옴
   const moving = !paused && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']);
   titanWalk += ((moving?1:0)-titanWalk)*Math.min(1,dt/140);
@@ -2206,7 +2473,7 @@ function updateHUD(now){
   // 조준 표시 (사격 영웅): 크로스헤어가 적을 겨누면 빨갛게
   const cross = document.querySelector('.cross');
   aimOnTarget = hero.fireMode!=='melee' && !paused && !!rayHitEnemy(player.x,player.y,player.ang);
-  const sightUp = (hero.weapon==='rifle' || hero.weapon==='sniper') && aimBlend>0.7;   // 조준경으로 겨누는 중
+  const sightUp = (hero.weapon==='rifle' || (hero.weapon==='sniper' && !gunRigOn())) && aimBlend>0.7;   // 조준경으로 겨누는 중 (조준경 안의 점이 조준점을 대신함)
   if((adsActive && hero && hero.weapon==='sniper') || sightUp){
     cross.classList.add('hide');  // 스코프 사용 중엔 CSS 크로스헤어 숨김
   } else {
@@ -2233,6 +2500,7 @@ function loop(t){
     // 근접 임팩트 순간에 타격 적용 (무기에 따라 타이밍 다름)
     const _impactMs = hero.weapon==='katana' ? 200 : titanRigOn() ? TITAN_RIG.IMPACT_MS : SWING_IMPACT;
     if(!swingHitDone && t-swingT>=_impactMs){ applyMelee(); swingHitDone=true; }
+    if(iaiPending && performance.now()-iaiFlash>=KAGE_RIG.IAI_HIT_MS){ iaiPending=false; iaiSlash(); }   // 거합: 발도 순간에 피해
     updatePlayer(dt);
     updateEnemies(dt,t);
     updateMissiles(dt);
