@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OVERSHOT — 1인칭 슈터</title>
-<link rel="stylesheet" href="styles.css?v=20261114a">
+<link rel="stylesheet" href="styles.css?v=20261115a">
 </head>
 <body>
 <div id="app">
@@ -28,6 +28,8 @@
       <h2>영웅 선택</h2>
       <div class="greet" id="greet">전장에 어서 오세요</div>
       <div class="heroes" id="heroList"></div>
+      <h3 class="map-title">모드 선택</h3>
+      <div class="maps modes" id="modeList"></div>
       <h3 class="map-title">맵 선택</h3>
       <div class="maps" id="mapList"></div>
       <button class="btn btn-primary" id="startBtn" style="max-width:360px;margin:26px auto 0;display:block;opacity:.4;pointer-events:none;">전투 시작 ▸</button>
@@ -52,6 +54,7 @@
       <div class="toast" id="toast"></div>
       <div class="lockmsg" id="lockmsg">클릭하면 시점 조작 시작 · ESC로 일시정지</div>
       <button id="quitBtn" class="hide">✕ 메뉴로 (Q)</button>
+      <div id="upgrade" class="hide"><div id="upgradeTitle"></div><div id="upgradeList"></div><div class="uphint">숫자 키 1 · 2 · 3 으로 고르세요 (커서가 보이면 클릭도 가능)</div></div>
     </div>
   </section>
 
@@ -63,6 +66,7 @@
       <div class="b"><div class="k">처치</div><div class="v" id="ovKill" style="color:var(--orange)">0</div></div>
       <div class="b"><div class="k">생존시간</div><div class="v" id="ovTime" style="color:var(--cyan)">0s</div></div>
     </div>
+    <div id="ovMode"></div>
     <div id="ovNew" class="hide">★ 신기록!</div>
     <div id="ovBest">최고 기록 · 처치 0 · 생존 0s</div>
     <div id="overBtns">
@@ -72,11 +76,12 @@
   </section>
 
 </div>
-<script src="kage3d.js?v=20261114a"></script>
-<script src="fp3d.js?v=20261114a"></script>
-<script src="titan3d.js?v=20261114a"></script>
-<script src="guns3d.js?v=20261114a"></script>
-<script src="world3d.js?v=20261114a"></script>
-<script src="game.js?v=20261114a"></script>
+<script src="kage3d.js?v=20261115a"></script>
+<script src="fp3d.js?v=20261115a"></script>
+<script src="titan3d.js?v=20261115a"></script>
+<script src="guns3d.js?v=20261115a"></script>
+<script src="world3d.js?v=20261115a"></script>
+<script src="modes.js?v=20261115a"></script>
+<script src="game.js?v=20261115a"></script>
 </body>
 </html>
