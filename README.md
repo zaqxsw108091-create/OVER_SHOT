@@ -22,6 +22,14 @@
 
 ## Core Implementation
 
+### Game Modes
+Picked on the hero-select screen (`modes.js`); best results are stored per hero and mode.
+- **Wave Defense** — 8 waves, the last one a boss. Enemies come in four kinds: grunt (rifle), runner (fast melee), heavy (slow, tough, hits hard) and the Warlord boss, which calls reinforcements at 66% / 33% health and shells the ground with telegraphed red circles. After each wave you pick 1 of 3 upgrades (damage, fire rate, max health, speed, skill cooldown, armor, heal-on-kill).
+- **Point Capture 4 vs 4** — you plus three AI teammates (the three heroes you did not pick, each with its own role: Titan and Kage fight up close, Spark sprays, Medica snipes and heals) against four enemies. Capture points A → B → C in order before the clock runs out; each capture adds time. A point only advances while no enemy stands on it. Everyone respawns, so a death is a setback, not the end.
+- **Free Survival** — the original endless mode.
+
+Enemies and teammates find their way with a breadth-first distance field per goal cell (cached, since the map never changes), walk straight when the line is clear, and keep apart with a simple separation pass.
+
 ### Maps
 Two maps can be picked on the hero-select screen (the choice is remembered):
 - **Classic Maze (2.5D)** — the original 16 × 16 raycast maze.
@@ -113,6 +121,7 @@ OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
 ├── game.js           # Game logic, 2D rendering, poses and effects (~2,600 lines)
+├── modes.js          # Game modes (wave defense + boss, 4v4 point capture, survival), enemy kinds, pathfinding, ally/enemy AI
 ├── fp3d.js           # Shared first-person 3D engine: shape builder, PBR shader, gloved hands, two-bone IK arms
 ├── guns3d.js         # Spark rifle RAZOR-FX + Medica sniper LUX-VALOR (3D, built in code)
 ├── world3d.js        # 3D map renderer: neon city, point lights, wet-road reflections, sky, 3D enemy robots

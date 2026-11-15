@@ -22,6 +22,14 @@
 
 ## 핵심 구현
 
+### 게임 모드
+영웅 선택 화면에서 고릅니다(`modes.js`). 최고 기록은 영웅·모드별로 저장됩니다.
+- **웨이브 디펜스** — 8웨이브, 마지막은 보스. 적은 네 종류: 보병(소총), 돌격병(빠른 근접), 중장병(느리고 단단하고 아픔), 보스 워로드. 보스는 체력 66%·33%에서 증원을 부르고, 붉은 원으로 예고한 뒤 폭격합니다. 웨이브가 끝날 때마다 강화 3개 중 1개를 고릅니다(화력·공격 속도·최대 체력·이동 속도·스킬 재사용·방어·처치 시 회복).
+- **거점 점령 4:4** — 플레이어 + AI 아군 3명(고르지 않은 세 영웅. 타이탄·카게는 붙어서 싸우고, 스파크는 연사, 메디카는 저격하며 치료) 대 적 4명. 제한 시간 안에 거점 A → B → C를 차례로 점령하며, 점령할 때마다 시간이 늘어납니다. 거점 안에 적이 한 명이라도 있으면 진행이 멈춥니다. 쓰러져도 다시 투입됩니다.
+- **자유 생존** — 원래의 끝없는 모드.
+
+적과 아군은 목표 칸마다 한 번 계산해 두는 거리 지도(너비 우선 탐색)로 길을 찾고, 길이 트여 있으면 곧게 걸으며, 서로 겹치지 않게 밀어냅니다.
+
 ### 맵
 영웅 선택 화면에서 맵을 고를 수 있습니다 (고른 맵은 기억됨).
 - **클래식 미로 (2.5D)** — 원래의 16 × 16 레이캐스팅 미로.
@@ -115,6 +123,7 @@ OVER_SHOT/
 ├── index.html        # Screen layout  (login / hero-pick / game / game-over)
 ├── styles.css        # All styles
 ├── game.js           # Game logic, 2D rendering, poses and effects (~2,600 lines)
+├── modes.js          # Game modes, enemy kinds, pathfinding, ally/enemy AI
 ├── fp3d.js           # Shared first-person 3D engine (shape builder, PBR shader, hands, IK arms)
 ├── guns3d.js         # Spark rifle + Medica sniper (3D, built in code)
 ├── world3d.js        # 3D map renderer (neon city, lights, reflections, sky, enemy robots)
@@ -131,6 +140,7 @@ OVER_SHOT/
 - `index.html` — 화면 배치 (로그인 / 영웅 선택 / 게임 / 게임 오버)
 - `styles.css` — 모든 스타일
 - `game.js` — 게임 규칙, 2D 그리기, 자세·효과 (약 2,600줄)
+- `modes.js` — 게임 모드(웨이브 디펜스+보스, 거점 점령 4:4, 자유 생존), 적 종류, 길 찾기, 아군·적 전투 AI
 - `fp3d.js` — 1인칭 3D 장비 공용 엔진: 형태 빚기, 금속 셰이더, 쥔 물건 굵기에 맞춰 감기는 장갑 손, 2관절 팔 계산
 - `guns3d.js` — 스파크의 소총 RAZOR-FX와 메디카의 저격총 LUX-VALOR (코드로 빚은 3D 모델)
 - `world3d.js` — 3D 맵 표시기: 네온 도시, 점광원 16개, 젖은 노면 반사, 노을 하늘, 3D 적 로봇

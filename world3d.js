@@ -277,9 +277,9 @@ void main(){
 
   // ── 적 로봇 (3D) ───────────────────────────────────────────
   //  로봇 좌표: 발밑 = 원점, +y 위, -z 앞(보는 쪽). 키 약 0.62
-  function buildBot(){
+  function buildBot(armor = '#7a1f1a', RED = '#ff3b2e'){        // armor: 장갑 색, RED: 눈·가슴 빛 색 (아군은 파랑)
     const b = FP3D.Builder(), Y = [0,1,0], ZF = [0,0,-1];
-    const ARM = ['#7a1f1a',0.6,0.42], DK = ['#1c1e24',0.8,0.5], MET = ['#565c66',1,0.4], RED = '#ff3b2e';
+    const ARM = [armor,0.6,0.42], DK = ['#1c1e24',0.8,0.5], MET = ['#565c66',1,0.4];
     for (const sx of [-1,1]){                                                  // 다리
       b.mat(...DK);  b.box([sx*0.055,0.09,0.0], [0.05,0.18,0.06], 0.012);
       b.mat(...ARM); b.box([sx*0.055,0.025,-0.015], [0.065,0.05,0.11], 0.012); b.box([sx*0.058,0.20,-0.005], [0.066,0.09,0.075], 0.014);
@@ -317,7 +317,7 @@ void main(){
       const tl = gl.getAttribLocation(st.sky, 'aPos'); gl.enableVertexAttribArray(tl); gl.vertexAttribPointer(tl, 2, gl.FLOAT, false, 0, 0);
       gl.bindVertexArray(null);
       st.atlasCv = paintAtlas(); st.atlas = FP3D.texture(st.atlasCv);
-      st.bot = FP3D.mesh(buildBot());
+      st.bot = FP3D.mesh(buildBot()); st.botBlue = FP3D.mesh(buildBot('#1b4c9c', '#39d3e0'));
       st.ready = true;
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (st.ready){ st.atlasCv = paintAtlas(); st.atlas = FP3D.texture(st.atlasCv, st.atlas); } });
     } catch(e){
@@ -343,7 +343,8 @@ void main(){
   const viewRot = a => { const c = Math.cos(a), s = Math.sin(a); return [[-s,0,-c],[0,1,0],[c,0,-s]]; };
   const mv = FP3D.V.mv;
 
-  // 한 화면 그리기: 하늘 → 도시 → 적 로봇.  cam = {x, y, ang},  bots = [{x, y, flash(0~1), fall(0~1), dir}]
+  // 한 화면 그리기: 하늘 → 도시 → 로봇.  cam = {x, y, ang}
+  //  bots = [{x, y, flash(0~1), fall(0~1), dir, scale, tint:[r,g,b], blue(아군), face(보는 방향 각도 — 없으면 플레이어를 봄)}]
   function render(ctx, cam, time, bots){
     if (!st.ready || !st.mesh) return false;
     const [gl, W, H] = FP3D.begin(ctx), pr = proj(W, H); st.W = W; st.H = H;
@@ -369,10 +370,12 @@ void main(){
       gl.uniform1fv(u.uE, new Float32Array([1, 0.9+0.3*Math.sin(time*6), 1,1,1,1,1,1]));
       gl.uniform3f(u.uFront, 0.5, 0.25, 0.45);
       gl.bindTexture(gl.TEXTURE_2D, P.white); gl.uniform1i(u.uTex, 0);
-      gl.bindVertexArray(st.bot.vao);
       for (const b of bots){
-        const dx = cam.x-b.x, dz = cam.y-b.y, dl = Math.hypot(dx, dz) || 1, fx = dx/dl, fz = dz/dl;   // 로봇은 늘 플레이어를 봄
-        let Rm = [[-fz,0,fx],[0,1,0],[-fx,0,-fz]];                              // 열: 오른쪽, 위, 뒤(+z)
+        const m = b.blue ? st.botBlue : st.bot; gl.bindVertexArray(m.vao);
+        const dx = cam.x-b.x, dz = cam.y-b.y, dl = Math.hypot(dx, dz) || 1;
+        const fx = b.face != null ? Math.cos(b.face) : dx/dl, fz = b.face != null ? Math.sin(b.face) : dz/dl;
+        const sc = b.scale || 1, tn = b.tint || [1,1,1];
+        let Rm = [[-fz*sc,0,fx*sc],[0,sc,0],[-fx*sc,0,-fz*sc]];                 // 열: 오른쪽, 위, 뒤(+z) × 크기
         const bob = b.fall ? 0 : Math.sin(time*5 + b.x*3.1 + b.y*1.7)*0.008;
         let T = [b.x, bob, b.y];
         if (b.fall){                                                            // 쓰러짐: 뒤로 넘어가며 가라앉음
@@ -382,9 +385,9 @@ void main(){
         }
         const M = Rm.map(col => mv(V, col)), Tv = mv(V, [T[0]-eye[0], T[1]-eye[1], T[2]-eye[2]]);
         const fog = 1 - Math.exp(-dl*0.03), k = (1-fog*0.75)*(b.fall ? 1-0.6*b.fall : 1);
-        gl.uniform3f(u.uTint, k, k, k); gl.uniform1f(u.uFlash, b.flash || 0);
+        gl.uniform3f(u.uTint, k*tn[0], k*tn[1], k*tn[2]); gl.uniform1f(u.uFlash, b.flash || 0);
         gl.uniformMatrix3fv(u.uM, false, [...M[0], ...M[1], ...M[2]]); gl.uniform3fv(u.uT, Tv);
-        gl.drawArrays(gl.TRIANGLES, 0, st.bot.count);
+        gl.drawArrays(gl.TRIANGLES, 0, m.count);
       }
     }
     gl.bindVertexArray(null);

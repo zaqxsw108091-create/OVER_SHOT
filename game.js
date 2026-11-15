@@ -31,6 +31,8 @@ const HEROES = [
 //  게임 판정용 숫자 격자로 바꿔 씀: 0 = 길, 1 = 시야·이동을 모두 막음, 2 = 낮은 엄폐물(이동만 막고 그 너머로 보고 쏠 수 있음)
 const MAPS = [
   { id:'classic', name:'클래식 미로', tag:'2.5D', desc:'레이캐스팅으로 그리는 원래 미로. 좁은 복도에서 벌어지는 근접전.',
+    // 거점 점령: 거점 A·B·C, 아군 출발점, 거점마다 적이 나오는 곳
+    zones:[[3.5,7.5],[8.5,9.5],[12.5,13.5]], blue:[1.5,1.5], reds:[[8.5,9.5],[12.5,13.5],[14.5,11.5]],
     rows:[
       "################",
       "#........#.....#",
@@ -48,7 +50,8 @@ const MAPS = [
       "#..............#",
       "#.#####.######.#",
       "################" ] },
-  { id:'busan', name:'네오 부산', tag:'3D 시안', is3d:true, desc:'네온 간판이 빛나는 노을 진 거리. 높낮이가 다른 건물과 낮은 엄폐물이 있는 넓은 전장.',
+  { id:'busan', name:'네오 부산', tag:'3D 시안', is3d:true,
+    zones:[[11.5,3.5],[13.0,9.5],[12.0,17.5]], blue:[2.5,1.5], reds:[[13.0,9.5],[12.0,17.5],[21.5,20.5]], desc:'네온 간판이 빛나는 노을 진 거리. 높낮이가 다른 건물과 낮은 엄폐물이 있는 넓은 전장.',
     rows:[
       "########################",
       "#.......#......#.......#",
@@ -119,13 +122,12 @@ function saveRecords(r){ try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); 
 function recordFor(id){ const r=getRecords(); return r[id]||{kills:0,time:0}; }
 
 function buildHeroes(){
-  buildMaps();
+  buildMaps(); buildModes();
   const list = el('heroList'); list.innerHTML='';
   HEROES.forEach(h=>{
     const bars = Object.entries(h._bars).map(([k,v])=>
       `<div class="stat"><span>${k}</span><div class="bar"><i style="width:${Math.round(v*100)}%"></i></div></div>`).join('');
-    const rec = recordFor(h.id);
-    const recLine = `<div class="rec">최고 · 처치 ${rec.kills} · 생존 ${rec.time?rec.time.toFixed(1)+'s':'-'}</div>`;
+    const recLine = `<div class="rec">${recordLine(h, getRecords()[h.id+':'+curMode]).replace(h.name+' ','')}</div>`;
     const div = document.createElement('div');
     div.className='hero'; div.dataset.id=h.id;
     div.innerHTML = `<div class="emoji">${h.emoji}</div>
@@ -136,6 +138,18 @@ function buildHeroes(){
       div.classList.add('sel');
       const sb=el('startBtn'); sb.style.opacity=1; sb.style.pointerEvents='auto'; };
     list.appendChild(div);
+  });
+}
+// 모드 고르기
+function buildModes(){
+  const list=el('modeList'); if(!list) return; list.innerHTML='';
+  MODES.forEach(m=>{
+    const d=document.createElement('div');
+    d.className='mapcard'+(m.id===curMode?' sel':''); d.dataset.id=m.id;
+    d.innerHTML=`<span class="tag">${m.tag}</span><h4>${m.name}</h4><p>${m.desc}</p>`;
+    d.onclick=()=>{ curMode=m.id; try{ localStorage.setItem('overshot_mode_v1',m.id); }catch(e){}
+      const keep=selHero; buildHeroes(); if(keep){ selHero=keep; const c=document.querySelector(`.hero[data-id="${keep.id}"]`); if(c) c.classList.add('sel'); } };
+    list.appendChild(d);
   });
 }
 // 맵 고르기 (영웅 선택 화면 아래)
@@ -186,8 +200,9 @@ function startGame(){
   barrierHits=[]; barrierOffT=-1e9; meleeKick=0; titanReset(); gunSway.t=0;
   fxCasings=[]; fxSmoke=[]; fxImpacts=[]; fxTracers=[]; fxDead=[]; recoilJit=0; missileFireT=-1e9; sniperEjected=true; aimBlend=0;
   el('abilName').textContent = hero.ability + ' [E]';
+  el('killVal').textContent = 0;
   el('ammoVal').textContent = hero.fireMode==='melee' ? '∞' : ammo;
-  spawnWave(6);
+  modeStart();                       // 모드별 시작 (웨이브·거점 점령·자유 생존) — modes.js
   startTime = performance.now();
   el('lockmsg').classList.remove('hide');
   el('quitBtn').classList.remove('hide');
@@ -202,11 +217,6 @@ function freeCell(){
   }
   return {x:MAP_W-2.5,y:MAP_H-2.5};
 }
-function spawnWave(n){
-  for(let i=0;i<n;i++){ const c=freeCell();
-    enemies.push({ x:c.x, y:c.y, hp:60, maxhp:60, lastShot:0, hue:Math.random()*30 }); }
-}
-
 // ---------- 입력 ----------
 document.addEventListener('keydown',e=>{ keys[e.code]=true;
   if(e.code==='KeyR') reload();
@@ -267,7 +277,7 @@ document.addEventListener('mouseup',e=>{
 document.addEventListener('contextmenu',e=>e.preventDefault());
 
 function quitToMenu(){
-  running=false; paused=true; firing=false;
+  running=false; paused=true; firing=false; upgradeOpen=false; hideUpgrade();
   if(document.pointerLockElement===cv) document.exitPointerLock();
   el('quitBtn').classList.add('hide');
   show('pick');
@@ -372,7 +382,7 @@ function drawDeadEnemy(d,dist){
   const size=Math.min(H*1.1,(H/dist)*0.75), top=H/2-size*0.42;
   ctx.save(); ctx.globalAlpha=1-f*f;
   ctx.translate(pr.sx, top+size*0.68); ctx.rotate(d.dir*_easeIn(f)*1.35); ctx.translate(0,-size*0.68+size*0.2*f);
-  ctx.fillStyle='#7a2a1c';
+  ctx.fillStyle = d.col ? `rgb(${d.col.map(v=>Math.round(v*0.5)).join(',')})` : '#7a2a1c';
   roundRect(-size*0.18,size*0.18,size*0.36,size*0.5,size*0.06); ctx.fill();
   ctx.beginPath(); ctx.arc(0,size*0.1,size*0.16,0,7); ctx.fill();
   ctx.restore();
@@ -394,6 +404,7 @@ function reloadAnim(now){
 // ---------- 사격 ----------
 function attack(){
   const now=performance.now();
+  if(playerDead || upgradeOpen) return;
   if(reloading || now-lastShot < currentFireRate()) return;
   if(hero.weapon==='katana' && iaiFlash && now-iaiFlash<KAGE_RIG.IAI_MS*0.8) return;   // 거합 중엔 일반 베기 불가
   if(hero.fireMode==='melee'){ startSwing(now); return; }
@@ -412,7 +423,7 @@ function attack(){
     const off = (spread/FOV)*W;                    // 퍼진 각도만큼 화면에서 옆으로
     const hit = rayHitEnemy(player.x,player.y,a);
     if(hit){ hitAny=true;
-      hit.e.hp -= hero.dmg; hit.e.hitT=now;
+      hit.e.hp -= hero.dmg*mods.dmg; hit.e.hitT=now;
       // 맞은 적이 뒤로 살짝 밀림
       const kb=sn?0.18:0.05, nx=hit.e.x+Math.cos(a)*kb, ny=hit.e.y+Math.sin(a)*kb;
       if(!isWall(nx,hit.e.y)) hit.e.x=nx; if(!isWall(hit.e.x,ny)) hit.e.y=ny;
@@ -444,14 +455,14 @@ function applyMelee(){
     while(ang<-Math.PI)ang+=2*Math.PI; while(ang>Math.PI)ang-=2*Math.PI;
     if(Math.abs(ang)>hero.meleeArc) continue;
     if(blockedByWall(player.x,player.y,e.x,e.y)) continue;
-    e.hp -= hero.dmg; hitAny=true;
+    e.hp -= hero.dmg*mods.dmg; e.hitT=performance.now(); hitAny=true;
     if(e.hp<=0) killEnemy(e);
   }
   if(hero.weapon==='hammer'){ titanHit=hitAny; if(hitAny) titanStopT=performance.now(); meleeKick=hitAny?13:7; }
   if(hitAny){ hitMarker(); shake=Math.max(shake, hero.weapon==='hammer'?14:9); }
   else shake=Math.max(shake, hero.weapon==='hammer'?6:3); // 헛스윙도 약한 진동
 }
-function currentFireRate(){ return hero.fireRate; }
+function currentFireRate(){ return hero.fireRate/mods.rate; }
 
 // 광선 vs 적 (가장 가까운 적, 벽에 막히면 X)
 function rayHitEnemy(ox,oy,ang){
@@ -477,12 +488,11 @@ function blockedByWall(x0,y0,x1,y1){
   return false;
 }
 
-function killEnemy(e){
+function killEnemy(e, byAlly){
   enemies.splice(enemies.indexOf(e),1);
-  fxDead.push({ x:e.x, y:e.y, t:performance.now(), dir:Math.random()<0.5?-1:1 });
-  kills++; el('killVal').textContent=kills;
-  toast('처치!', hero.color);
-  if(enemies.length<=2) spawnWave(3+Math.floor(kills/6)); // 계속 보충
+  fxDead.push({ x:e.x, y:e.y, t:performance.now(), dir:Math.random()<0.5?-1:1, scale:e.scale, tint:e.tint, col:e.col });
+  if(!byAlly){ kills++; el('killVal').textContent=kills; toast(e.T && e.T.boss ? '보스 격파!' : '처치!', hero.color); }
+  modeOnKill(e);
 }
 
 function reload(){
@@ -494,17 +504,17 @@ function reload(){
 // ---------- 스킬 ----------
 function useAbility(){
   const now=performance.now();
-  if(!abilReady||abilActive) return;
+  if(!abilReady||abilActive||playerDead||upgradeOpen||!running) return;
   if(hero.abilType==='missile'){
     launchMissile();
-    abilReady=false; abilCdEnd=now+hero.abilCd;
+    abilReady=false; abilCdEnd=now+abilCdMs();
     toast('미사일 발사!', hero.color);
     return;
   }
   if(hero.abilType==='iai'){
     // 거합: 먼저 칼을 허리로 당겨 자세를 잡고(納刀の構え), 잠시 뒤 발도와 함께 베기 피해가 들어감 (loop에서 iaiSlash 호출)
     iaiFlash=now; iaiPending=true; swingHitDone=true; kagePetals=[];
-    abilReady=false; abilCdEnd=now+hero.abilCd;
+    abilReady=false; abilCdEnd=now+abilCdMs();
     toast('거합!', hero.color);
     return;
   }
@@ -544,61 +554,32 @@ function explode(x,y){
   const R=2.2, DMG=85;
   for(const e of [...enemies]){
     const d=Math.hypot(e.x-x,e.y-y);
-    if(d<R){ e.hp -= DMG*(1-d/R); if(e.hp<=0) killEnemy(e); }
+    if(d<R){ e.hp -= DMG*mods.dmg*(1-d/R); e.hitT=performance.now(); if(e.hp<=0) killEnemy(e); }
   }
 }
 const HEAL_PER_SEC = 10.8; // 회복 스킬: 초당 회복량 (모니터 주사율과 무관)
 function updateAbility(now, dt){
   if(abilActive){
     if(hero.abilType==='heal'){ player.hp=Math.min(player.maxhp,player.hp+HEAL_PER_SEC*dt/1000); }
-    if(now>=abilEnd){ abilActive=false; abilCdEnd=now+hero.abilCd; if(hero.abilType==='barrier') barrierOffT=performance.now(); }
+    if(now>=abilEnd){ abilActive=false; abilCdEnd=now+abilCdMs(); if(hero.abilType==='barrier') barrierOffT=performance.now(); }
   }
   if(!abilActive && !abilReady && now>=abilCdEnd){ abilReady=true; }
   let pct;
   if(abilActive) pct = (abilEnd-now)/hero.abilDur;
   else if(abilReady) pct = 1;
-  else pct = 1-(abilCdEnd-now)/hero.abilCd;
+  else pct = 1-(abilCdEnd-now)/abilCdMs();
   el('abilBar').firstElementChild.style.width = Math.max(0,Math.min(1,pct))*100+'%';
   el('abilName').textContent = abilActive ? hero.ability+' 가동중!'
     : abilReady ? hero.ability+' [E] 준비' : hero.ability+' 충전중';
 }
 
 // ---------- 적 AI ----------
-function updateEnemies(dt,now){
-  for(const e of enemies){
-    const dx=player.x-e.x, dy=player.y-e.y;
-    const dist=Math.hypot(dx,dy);
-    const see = !blockedByWall(e.x,e.y,player.x,player.y);
-    if(see && dist>1.4){
-      const sp=0.026*dt*0.06;
-      const nx=e.x+dx/dist*sp, ny=e.y+dy/dist*sp;
-      if(!isWall(nx,e.y)) e.x=nx;
-      if(!isWall(e.x,ny)) e.y=ny;
-    }
-    // 사격
-    if(see && dist<8 && now-e.lastShot>1100){
-      e.lastShot=now;
-      if(abilActive && hero.id==='titan'){            // 방어막에 총알이 부딪힌 자리에 물결
-        const pp=projectPoint(e.x,e.y);
-        if(Math.abs(pp.ang)<0.75){
-          barrierHits.push({ x:Math.max(-0.8,Math.min(0.8,pp.sx/W*2-1))+(Math.random()-0.5)*0.12, y:(Math.random()-0.5)*0.6, t:performance.now() });
-          if(barrierHits.length>4) barrierHits.shift();
-        }
-      }
-      if(Math.random()<0.55){ // 명중 확률
-        let dmg = 8 + Math.random()*6;
-        if(abilActive && hero.id==='titan') dmg*=0.3; // 방벽
-        player.hp -= dmg; hitFlash();
-        if(player.hp<=0){ player.hp=0; endGame(); }
-      }
-    }
-  }
-  el('enemyVal').textContent=enemies.length;
-}
+// (적·아군 AI는 modes.js의 updateEnemies / updateAllies)
 
 // ---------- 이동 ----------
 function updatePlayer(dt){
-  let sp = hero.speed*(dt*0.06);
+  if(playerDead) return;                     // 거점 점령: 쓰러져 있는 동안은 움직일 수 없음
+  let sp = hero.speed*mods.speed*(dt*0.06);
   const ca=Math.cos(player.ang), sa=Math.sin(player.ang);
   let mx=0,my=0;
   if(keys['KeyW']){ mx+=ca; my+=sa; }
@@ -645,8 +626,10 @@ function render(){
     const nowT=performance.now();
     ctx.fillStyle='#2a1626'; ctx.fillRect(-14,-14,W+28,H+28);
     const bots=[];
-    for(const e of enemies) bots.push({ x:e.x, y:e.y, flash: e.hitT ? Math.max(0,1-(nowT-e.hitT)/120)*0.8 : 0 });
-    for(const d of fxDead) bots.push({ x:d.x, y:d.y, fall: Math.max(0.001,Math.min(1,(nowT-d.t)/520)), dir:1 });
+    const fl=u=>u.hitT ? Math.max(0,1-(nowT-u.hitT)/120)*0.8 : 0;
+    for(const e of enemies) bots.push({ x:e.x, y:e.y, flash:fl(e), scale:e.scale, tint:e.tint, face:e.face });
+    for(const a of allies) if(!a.dead) bots.push({ x:a.x, y:a.y, flash:fl(a), scale:a.scale, blue:true, face:a.face });
+    for(const d of fxDead) bots.push({ x:d.x, y:d.y, fall: Math.max(0.001,Math.min(1,(nowT-d.t)/520)), dir:1, scale:d.scale, tint:d.tint, blue:d.blue });
     World3D.render(ctx, player, nowT/1000, bots);
     depth = new Array(48);
     for(let r=0;r<48;r++){ const a=player.ang-FOV/2+(r/48)*FOV, ca=Math.cos(a), sa=Math.sin(a); let d=0;
@@ -693,12 +676,14 @@ function render(){
   // 적 + 미사일 깊이 정렬해서 함께 그림
   const things=[];
   for(const e of enemies) things.push({t:'e',o:e,d:Math.hypot(e.x-player.x,e.y-player.y)});
+  if(!m3d) for(const a of allies) if(!a.dead) things.push({t:'a',o:a,d:Math.hypot(a.x-player.x,a.y-player.y)});
   for(const m of missiles) things.push({t:'m',o:m,d:Math.hypot(m.x-player.x,m.y-player.y)});
   for(const b of blasts) things.push({t:'b',o:b,d:Math.hypot(b.x-player.x,b.y-player.y)});
   for(const dd of fxDead) things.push({t:'d',o:dd,d:Math.hypot(dd.x-player.x,dd.y-player.y)});
   things.sort((a,b)=>b.d-a.d);
   for(const it of things){
     if(it.t==='e'){ if(m3d) drawEnemyBar3D(it.o,it.d); else drawEnemy(it.o,it.d,numRays,colW); }
+    else if(it.t==='a') drawEnemy(it.o,it.d,numRays,colW);
     else if(it.t==='d'){ if(!m3d) drawDeadEnemy(it.o,it.d); }
     else if(it.t==='m') drawSprite(it.o,it.d,'missile');
     else drawSprite(it.o,it.d,'blast');
@@ -708,6 +693,7 @@ function render(){
   if(hero.id==='titan' && (abilActive || performance.now()-barrierOffT<420)) drawBarrier();
 
   drawWorldFx(performance.now());   // 탄착 불꽃·먼지
+  modeDrawWorld(performance.now()); // 거점 고리·폭격 예고·아군 이름표·목표 표시
 
   ctx.restore(); // 흔들림 레이어 끝
 
@@ -725,6 +711,7 @@ function render(){
 
   // 미니맵 (좌상단)
   drawMinimap();
+  modeDrawHUD(performance.now());   // 웨이브·보스 체력 / 거점 진행·남은 시간
 }
 
 // 월드 공간 점(미사일/폭발)을 화면에 투영
@@ -739,7 +726,7 @@ function projectPoint(wx,wy){
 // 3D 맵의 적 체력바: 로봇 머리 위에 떠 있음 (벽 뒤면 숨김)
 function drawEnemyBar3D(e,dist){
   if(e.hp>=e.maxhp || dist<0.3 || blockedByWall(player.x,player.y,e.x,e.y)) return;
-  const q=World3D.project(player,e.x,e.y,0.70); if(!q) return;
+  const q=World3D.project(player,e.x,e.y,0.66*(e.scale||1)+0.05); if(!q) return;
   const bw=Math.max(26,Math.min(120,H*0.16/q.depth));
   ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(q.x-bw/2,q.y-3,bw,6);
   ctx.fillStyle='#3cf06e'; ctx.fillRect(q.x-bw/2,q.y-3,bw*(e.hp/e.maxhp),6);
@@ -835,6 +822,7 @@ function drawMinimap(){
   ctx.fillStyle='#ff4d4d';
   for(const e of enemies){ ctx.beginPath();
     ctx.arc(ox+e.x*cell, oy+e.y*cell, 2.6, 0, 7); ctx.fill(); }
+  modeMinimap(ox,oy,cell);
   // 플레이어 + 시야
   const px=ox+player.x*cell, py=oy+player.y*cell;
   ctx.strokeStyle='rgba(57,211,224,.6)'; ctx.lineWidth=1.5;
@@ -852,9 +840,10 @@ function drawEnemy(e,dist,numRays,colW){
   if(Math.abs(ang)>FOV/2+0.3) return;
   if(blockedByWall(player.x,player.y,e.x,e.y)) return;
 
-  const size = Math.min(H*1.1, (H/dist)*0.75);
+  const base0 = Math.min(H*1.1, (H/dist)*0.75), size = base0*(e.scale||1);   // 종류마다 크기가 다름 (발은 같은 바닥에)
   const screenX = (0.5 + ang/FOV)*W;
-  const top = H/2 - size*0.42;
+  const top = H/2 + base0*0.26 - size*0.68;
+  const C = e.col || [200,60,40];
   // 깊이 가림 (벽 뒤면 안 그림)
   const rayIdx = Math.floor((screenX/W)*numRays);
   if(rayIdx>=0 && rayIdx<numRays && depth[rayIdx] < dist-0.3) {
@@ -865,12 +854,12 @@ function drawEnemy(e,dist,numRays,colW){
   ctx.save();
   ctx.translate(screenX + hf*size*0.04, top);
   // 몸통
-  ctx.fillStyle=`rgba(${Math.round(200*shade)},${Math.round(60*shade)},${Math.round(40*shade)},1)`;
+  ctx.fillStyle=`rgba(${Math.round(C[0]*shade)},${Math.round(C[1]*shade)},${Math.round(C[2]*shade)},1)`;
   roundRect(-size*0.18,size*0.18,size*0.36,size*0.5,size*0.06); ctx.fill();
   // 머리
   ctx.beginPath(); ctx.arc(0,size*0.1,size*0.16,0,7); ctx.fill();
   // 눈 (빨강)
-  ctx.fillStyle=`rgba(255,${abilReady?60:90},60,${shade})`;
+  ctx.fillStyle = e.blue ? `rgba(150,235,255,${shade})` : `rgba(255,${abilReady?60:90},60,${shade})`;
   ctx.beginPath(); ctx.arc(-size*0.06,size*0.08,size*0.028,0,7);
   ctx.arc(size*0.06,size*0.08,size*0.028,0,7); ctx.fill();
   if(hf>0){
@@ -878,8 +867,8 @@ function drawEnemy(e,dist,numRays,colW){
     roundRect(-size*0.18,size*0.18,size*0.36,size*0.5,size*0.06); ctx.fill();
     ctx.beginPath(); ctx.arc(0,size*0.1,size*0.16,0,7); ctx.fill();
   }
-  // 체력바
-  if(e.hp<e.maxhp){
+  // 체력바 (아군은 이름표와 함께 따로 그림)
+  if(e.hp<e.maxhp && !e.blue){
     const bw=size*0.4;
     ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(-bw/2,-size*0.06,bw,6);
     ctx.fillStyle='#3cf06e'; ctx.fillRect(-bw/2,-size*0.06,bw*(e.hp/e.maxhp),6);
@@ -924,7 +913,7 @@ function shade3(x,w,c0,c1,c2){
 // 스킬 충전 정도 0~1 (무기 장식 표시용)
 function abilCharge(now){
   if(abilActive||abilReady) return 1;
-  return Math.max(0,Math.min(1,1-(abilCdEnd-now)/hero.abilCd));
+  return Math.max(0,Math.min(1,1-(abilCdEnd-now)/abilCdMs()));
 }
 
 // 팔(소매)+손(장갑) 그리기 헬퍼 — 색을 넘기면 영웅별 장갑 디자인
@@ -1597,7 +1586,7 @@ function iaiSlash(){
     const inArc = Math.hypot(dx,dy)<=2.8 && Math.abs(ang)<=1.15;
     if(!onPath && !inArc) continue;
     if(blockedByWall(ox,oy,e.x,e.y) && blockedByWall(player.x,player.y,e.x,e.y)) continue; // 벽 너머 적은 베지 않음
-    e.hp-=135; hitAny=true;
+    e.hp-=135*mods.dmg; e.hitT=performance.now(); hitAny=true;
     if(e.hp<=0) killEnemy(e);
   }
   if(hitAny){ hitMarker(); shake=Math.max(shake,16); }
@@ -2494,8 +2483,9 @@ let lastT=0;
 function loop(t){
   if(!running) return;
   const dt=Math.min(40, t-lastT||16); lastT=t;
-  if(!paused){
+  if(!paused && !upgradeOpen){
     gameTime += dt;
+    modeUpdate(dt, performance.now());   // 웨이브 진행·거점 점령·부활·보스 폭격
     if(firing && hero.fireMode!=='semi') attack(); // 꾹 누르면 자동 연사/연속 타격
     // 근접 임팩트 순간에 타격 적용 (무기에 따라 타이밍 다름)
     const _impactMs = hero.weapon==='katana' ? 200 : titanRigOn() ? TITAN_RIG.IMPACT_MS : SWING_IMPACT;
@@ -2540,23 +2530,31 @@ function drawPauseOverlay(){
 }
 
 function endGame(){
-  running=false; firing=false;
+  running=false; firing=false; upgradeOpen=false; hideUpgrade();
   el('quitBtn').classList.add('hide');
   if(document.pointerLockElement===cv) document.exitPointerLock();
-  const secs = gameTime/1000;
-  el('overTitle').textContent = '전투 종료';
+  const secs = gameTime/1000, R = modeResult(secs);
+  el('overTitle').textContent = R.title;
+  el('overTitle').style.color = gameResult==='win' ? '#3cf06e' : gameResult==='lose' ? '#ff6a6a' : '';
   el('ovKill').textContent = kills;
   el('ovTime').textContent = secs.toFixed(1)+'s';
-  // 기록 갱신
+  el('ovMode').textContent = R.mode + (R.line ? ' · ' + R.line : '');
+  // 기록 갱신 (영웅 + 모드별)
   const recs = getRecords();
-  const cur = recs[hero.id] || {kills:0, time:0};
-  const newRecord = (kills>cur.kills) || (secs>cur.time);
-  recs[hero.id] = { kills:Math.max(kills,cur.kills), time:Math.max(secs,cur.time) };
+  const cur = recs[R.key] || {kills:0, time:0, score:0};
+  const newRecord = curMode==='survival' ? (kills>cur.kills || secs>cur.time) : (R.score>(cur.score||0));
+  recs[R.key] = { kills:Math.max(kills,cur.kills), time:Math.max(secs,cur.time), score:Math.max(R.score,cur.score||0) };
   saveRecords(recs);
-  const best = recs[hero.id];
-  el('ovBest').textContent = `${hero.name} 최고 기록 · 처치 ${best.kills} · 생존 ${best.time.toFixed(1)}s`;
+  el('ovBest').textContent = recordLine(hero, recs[R.key]);
   el('ovNew').classList.toggle('hide', !newRecord);
   show('over');
+}
+// 기록 한 줄 (영웅 선택 카드·결과 화면)
+function recordLine(h, r){
+  r = r || (curMode==='survival' && getRecords()[h.id]) || {kills:0,time:0,score:0};   // 자유 생존은 예전 기록도 이어서 보여 줌
+  if(curMode==='wave') return `${h.name} 최고 · ${r.score>=100 ? '보스 격파' : r.score ? 'WAVE '+r.score+' 도달' : '기록 없음'}`;
+  if(curMode==='capture') return `${h.name} 최고 · ${r.score>=100 ? '승리 (남은 시간 '+(r.score-100)+'초)' : r.score ? '거점 '+r.score+'곳 점령' : '기록 없음'}`;
+  return `${h.name} 최고 · 처치 ${r.kills} · 생존 ${r.time?r.time.toFixed(1)+'s':'-'}`;
 }
 
 // 초기 포커스

@@ -78,6 +78,32 @@
     padding:14px 16px; cursor:pointer; transition:transform .12s, border-color .2s; }
   .mapcard:hover{ transform:translateY(-3px); border-color:var(--cyan); }
   .mapcard.sel{ border-color:var(--orange); box-shadow:0 0 0 3px rgba(255,138,42,.18); }
+  .maps.modes{ grid-template-columns:repeat(3,1fr); max-width:960px; }
+  @media(max-width:680px){ .maps.modes{ grid-template-columns:1fr; } }
+  .maps.modes .mapcard h4{ margin-top:18px; }
+  /* 영웅·모드·맵이 한 화면에 들어오도록 조금 촘촘하게 */
+  .pick-wrap .hero{ padding-top:16px; padding-bottom:14px; }
+  .pick-wrap .hero .emoji{ font-size:40px; }
+  .pick-wrap .hero p{ min-height:0; }
+  .map-title{ margin:14px 0 8px; }
+  .mapcard{ padding:10px 14px; }
+  #startBtn{ margin-top:16px !important; position:sticky; bottom:6px; z-index:3; }   /* 목록이 길어도 시작 버튼은 늘 보이게 */
+  /* 강화 선택 (웨이브 사이) */
+  #upgrade{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(6,10,20,.72); pointer-events:auto; z-index:6; }
+  #upgrade.hide{ display:none; }
+  #upgradeTitle{ font-family:'Orbitron'; font-weight:900; font-size:clamp(18px,2.6vw,28px); color:#fff; letter-spacing:.06em; }
+  #upgradeList{ display:flex; gap:18px; margin-top:26px; flex-wrap:wrap; justify-content:center; }
+  .upcard{ position:relative; width:210px; padding:22px 18px 18px; text-align:center; cursor:pointer; border-radius:14px;
+    background:rgba(22,31,51,.95); border:2px solid var(--steel); transition:transform .12s, border-color .2s; }
+  .upcard:hover{ transform:translateY(-6px); border-color:var(--orange); }
+  .upcard .key{ position:absolute; top:10px; left:12px; font-family:'Orbitron'; font-weight:900; font-size:13px;
+    width:24px; height:24px; line-height:24px; border-radius:6px; background:var(--orange); color:#1a0d02; }
+  .upcard .ic{ font-size:44px; line-height:1; }
+  .upcard h4{ font-family:'Orbitron'; font-size:17px; margin-top:12px; color:#fff; }
+  .upcard p{ font-size:13px; color:#aab4c8; margin-top:8px; line-height:1.5; }
+  .uphint{ margin-top:22px; font-size:12px; color:#8893a8; letter-spacing:.06em; }
+  #ovMode{ z-index:2; margin-top:16px; font-size:15px; font-weight:700; color:#cfd8e6; letter-spacing:.04em; }
   .mapcard h4{ font-family:'Orbitron'; font-size:16px; }
   .mapcard p{ font-size:12px; color:#aab4c8; margin-top:6px; line-height:1.5; }
   .mapcard .tag{ position:absolute; top:12px; right:12px; font-size:10px; font-weight:700; letter-spacing:.08em;
