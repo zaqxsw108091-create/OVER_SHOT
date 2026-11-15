@@ -404,5 +404,22 @@ void main(){
   // 정면에서 각도 ang만큼 벗어난 방향의 화면 가로 위치 (원근 투영)
   const screenX = (ang, W, H) => W/2 + Math.tan(ang)*proj(W, H)[0]*W/2;
 
-  return { load, setMap, render, project, screenX, EYE, get ready(){ return st.ready; }, get failed(){ return st.failed; } };
+  // 로봇 하나를 2D 화면의 정해진 자리에 3D로 그리기 (레이캐스팅 미로용)
+  //  미로는 원근 투영이 아니라 각도에 비례해 그리므로, 로봇을 '화면의 이 자리에 이 크기로' 놓이도록 보기 공간 위치를 거꾸로 계산한다
+  //  b: render()의 로봇과 같은 값 {x, y, flash, fall, scale, tint, blue, face},  sx: 화면 가로 위치(px), unitPx: 맵 한 칸이 그 거리에서 몇 픽셀인지, shade: 거리에 따른 밝기
+  function botAt(ctx, cam, time, b, sx, unitPx, shade){
+    if (!st.ready || unitPx <= 0) return;
+    const W = ctx.canvas.width, H = ctx.canvas.height, pr = FP3D.proj(W, H);
+    const d = pr[1]*H/2/unitPx, xv = (sx/W*2-1)*d/pr[0];           // 이 깊이에 두면 1칸 = unitPx, 이 x에 두면 화면 sx
+    if (d < 0.08 || d > 28) return;
+    const V = viewRot(cam.ang), dx = cam.x-b.x, dz = cam.y-b.y, dl = Math.hypot(dx, dz) || 1;
+    const fx = b.face != null ? Math.cos(b.face) : dx/dl, fz = b.face != null ? Math.sin(b.face) : dz/dl, sc = b.scale || 1;
+    let Rm = [[-fz*sc,0,fx*sc],[0,sc,0],[-fx*sc,0,-fz*sc]], y = -EYE + (b.fall ? -0.12*b.fall*b.fall : Math.sin(time*5 + b.x*3.1 + b.y*1.7)*0.008);
+    if (b.fall){ const a = b.fall*b.fall*1.5*(b.dir||1), c = Math.cos(a), s2 = Math.sin(a); Rm = [[1,0,0],[0,c,s2],[0,-s2,c]].map(col => mv(Rm, col)); }
+    const k = shade*(b.fall ? 1-0.6*b.fall : 1), tn = b.tint || [1,1,1];
+    FP3D.draw(ctx, [{ m: b.blue ? st.botBlue : st.bot, R: Rm.map(col => mv(V, col)), T: [xv, y, -d], tint: [k*tn[0], k*tn[1], k*tn[2]], flash: b.flash || 0 }],
+      { E: [1, 0.9+0.3*Math.sin(time*6)], front: [0.25,0.2,0.3], keep: true });
+  }
+
+  return { load, setMap, render, project, screenX, botAt, EYE, get ready(){ return st.ready; }, get failed(){ return st.failed; } };
 })();
