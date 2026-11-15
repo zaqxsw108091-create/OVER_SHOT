@@ -434,7 +434,7 @@ void main(){
       gl.drawArrays(gl.TRIANGLES, 0, it.m.count);
     }
     gl.bindVertexArray(null); gl.disable(gl.SCISSOR_TEST);
-    ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+    ctx.save(); if (!o.keep) ctx.setTransform(1,0,0,1,0,0);     // o.keep: 지금의 변환·잘라내기 영역을 그대로 씀 (세계 화면 흔들림과 함께 움직임)
     ctx.drawImage(st.cv, x0, y0, x1-x0, y1-y0, x0, y0, x1-x0, y1-y0);
     ctx.restore();
   }

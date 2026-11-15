@@ -682,9 +682,9 @@ function render(){
   for(const dd of fxDead) things.push({t:'d',o:dd,d:Math.hypot(dd.x-player.x,dd.y-player.y)});
   things.sort((a,b)=>b.d-a.d);
   for(const it of things){
-    if(it.t==='e'){ if(m3d) drawEnemyBar3D(it.o,it.d); else drawEnemy(it.o,it.d,numRays,colW); }
-    else if(it.t==='a') drawEnemy(it.o,it.d,numRays,colW);
-    else if(it.t==='d'){ if(!m3d) drawDeadEnemy(it.o,it.d); }
+    if(it.t==='e'){ if(m3d) drawEnemyBar3D(it.o,it.d); else if(bots3dOn()) drawBotMaze(it.o,it.d,numRays,colW); else drawEnemy(it.o,it.d,numRays,colW); }
+    else if(it.t==='a'){ if(bots3dOn()) drawBotMaze(it.o,it.d,numRays,colW); else drawEnemy(it.o,it.d,numRays,colW); }
+    else if(it.t==='d'){ if(!m3d){ if(bots3dOn()) drawBotMaze(it.o,it.d,numRays,colW,true); else drawDeadEnemy(it.o,it.d); } }
     else if(it.t==='m') drawSprite(it.o,it.d,'missile');
     else drawSprite(it.o,it.d,'blast');
   }
@@ -832,6 +832,38 @@ function drawMinimap(){
   ctx.restore();
 }
 
+// 미로 맵의 3D 로봇: 적·아군·쓰러지는 로봇을 레이캐스팅 화면의 제자리에 3D로 그림. 벽에 가린 세로 줄은 잘라냄
+if(typeof World3D!=='undefined') World3D.load();
+function bots3dOn(){ return typeof World3D!=='undefined' && World3D.ready; }
+function drawBotMaze(u,dist,numRays,colW,dead){
+  if(dist<0.25) return;
+  let ang=Math.atan2(u.y-player.y,u.x-player.x)-player.ang;
+  while(ang<-Math.PI) ang+=2*Math.PI; while(ang>Math.PI) ang-=2*Math.PI;
+  if(Math.abs(ang)>FOV/2+0.35) return;
+  const corr=Math.max(0.2,dist*Math.cos(ang)), unitPx=(H/corr)*0.9, sc=(u.scale||1)*1.12;
+  const sx=(0.5+ang/FOV)*W, half=0.26*sc*unitPx, now=performance.now();
+  // 벽보다 앞에 있는 세로 줄만 남김
+  const i0=Math.max(0,Math.floor((sx-half)/colW)), i1=Math.min(numRays-1,Math.ceil((sx+half)/colW));
+  ctx.save(); ctx.beginPath(); let any=false, run=-1;
+  for(let i=i0;i<=i1+1;i++){
+    const vis = i<=i1 && depth[i] > corr-0.15;
+    if(vis && run<0) run=i;
+    if(!vis && run>=0){ ctx.rect(run*colW,0,(i-run)*colW+1,H); any=true; run=-1; }
+  }
+  if(!any){ ctx.restore(); return; }
+  ctx.clip();
+  const f = dead ? Math.max(0.001,Math.min(1,(now-u.t)/520)) : 0;
+  World3D.botAt(ctx, player, now/1000, { x:u.x, y:u.y, flash: u.hitT ? Math.max(0,1-(now-u.hitT)/120)*0.8 : 0, fall:f, dir:1,
+    scale:sc, tint:u.tint, blue:u.blue, face:u.face }, sx, unitPx, Math.max(0.4,1-dist/16));
+  ctx.restore();
+  // 적 체력바 (아군은 이름표와 함께 따로 그림)
+  const mid=Math.floor(sx/colW);
+  if(!dead && !u.blue && u.hp<u.maxhp && mid>=0 && mid<numRays && depth[mid]>corr-0.15){
+    const bw=Math.max(26,Math.min(120,unitPx*0.42)), y=H/2+unitPx*0.5-unitPx*(0.66*sc+0.06);
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(sx-bw/2,y-3,bw,6);
+    ctx.fillStyle='#3cf06e'; ctx.fillRect(sx-bw/2,y-3,bw*(u.hp/u.maxhp),6);
+  }
+}
 function drawEnemy(e,dist,numRays,colW){
   if(dist<0.3) return;
   const dx=e.x-player.x, dy=e.y-player.y;
